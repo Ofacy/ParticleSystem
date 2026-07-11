@@ -1,11 +1,20 @@
+
 mod state;
 mod app;
 mod particle_lifetime;
 mod particle_vertex;
+mod particle_chunk;
+mod init_shape;
+mod render_uniforms;
+mod simulation_parameters;
+mod camera;
+mod matrix4;
+mod vector;
+mod quaternion;
+mod texture;
 
 use winit::event_loop::EventLoop;
 
-use crate::app::App;
 
 pub fn main() -> anyhow::Result<()> {
     #[cfg(not(target_arch = "wasm32"))]
@@ -20,6 +29,8 @@ pub fn main() -> anyhow::Result<()> {
     let event_loop = EventLoop::with_user_event().build()?;
     #[cfg(not(target_arch = "wasm32"))]
     {
+        use crate::app::App;
+
         let mut app = App::new();
         event_loop.run_app(&mut app)?;
     }

@@ -9,6 +9,7 @@ pub struct App {
     #[cfg(target_arch = "wasm32")]
     proxy: Option<winit::event_loop::EventLoopProxy<State>>,
     state: Option<State>,
+    last_cursor_position: (f64, f64),
 }
 
 impl App {
@@ -17,6 +18,7 @@ impl App {
         let proxy = Some(event_loop.create_proxy());
         Self {
             state: None,
+            last_cursor_position: (0.0, 0.0),
             #[cfg(target_arch = "wasm32")]
             proxy,
         }
@@ -48,7 +50,7 @@ impl ApplicationHandler<State> for App {
         {
             // If we are not on web we can use pollster to
             // await the window creation
-            self.state = Some(pollster::block_on(State::new(window, 2048)).unwrap());
+            self.state = Some(pollster::block_on(State::new(window, 1_000_000)).unwrap());
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -109,6 +111,17 @@ impl ApplicationHandler<State> for App {
                     },
                 ..
             } => state.handle_key(event_loop, code, key_state.is_pressed()),
+            WindowEvent::CursorMoved { position, .. } => {
+                let delta_x = position.x - self.last_cursor_position.0;
+                let delta_y = position.y - self.last_cursor_position.1;
+                state.handle_mouse_move(delta_x, delta_y);
+                state.handle_absolute_mouse_position(position.x, position.y);
+                self.last_cursor_position = (position.x, position.y);
+            }
+            WindowEvent::MouseInput { device_id, state: mouse_state, button } => {
+                let is_pressed = mouse_state == winit::event::ElementState::Pressed;
+                state.handle_mouse_button(button, is_pressed);
+            }
             _ => {}
         }
     }

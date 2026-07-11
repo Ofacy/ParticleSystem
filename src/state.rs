@@ -1,10 +1,10 @@
 use core::f32;
-use std::{mem, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 
-use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ShaderStages, util::{BufferInitDescriptor, DeviceExt}, wgc::validation::BindingTypeName::Buffer};
+use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor, util::{BufferInitDescriptor, DeviceExt}};
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use crate::{particle_lifetime::ParticleLifetime, particle_vertex::ParticleVertex};
+use crate::{camera::Camera, init_shape::InitShapeUniforms, matrix4::Matrix4, particle_chunk::ParticleChunk, particle_vertex::ParticleVertex, quaternion::Quaternion, render_uniforms::RenderUniforms, simulation_parameters::{self, SimulationParameters}, texture::Texture, vector::Vec3};
 
 
 
@@ -16,19 +16,28 @@ pub struct State {
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
     window: Arc<Window>,
+    depth_texture: Texture,
     render_pipeline: wgpu::RenderPipeline,
+    render_uniform_bind_group: wgpu::BindGroup,
+    render_uniform_buffer: wgpu::Buffer,
 
     update_particle_compute_pipeline: wgpu::ComputePipeline,
     particle_init_cube_pipeline: wgpu::ComputePipeline,
     particle_init_uniform_buffer: wgpu::Buffer,
     particle_init_bind_group: wgpu::BindGroup,
 
-    lifetime_buffer: wgpu::Buffer,
-    compute_bind_group: wgpu::BindGroup,
-    
-    vertex_buffer: wgpu::Buffer,
+    particle_init_sphere_pipeline: wgpu::ComputePipeline,
 
-    particle_count: u32
+    particle_chunks: Vec<ParticleChunk>,
+    simulation_uniform_buffer: wgpu::Buffer,
+    simulation_uniform_bind_group: wgpu::BindGroup,
+
+    simulation_parameters: SimulationParameters,
+    particle_count: u32,
+
+    camera: Camera,
+    last_frame_time: Instant,
+    last_cursor_position: (f32, f32),
 }
 
 impl State {
@@ -36,6 +45,17 @@ impl State {
     // but we will in the next tutorial
     pub async fn new(window: Arc<Window>, particle_count: u32) -> anyhow::Result<Self> {
         let size = window.inner_size();
+
+        let camera = Camera::new(Vec3::new3([0.0, 0.0, 0.0]), Quaternion::from_vec(Vec3::new3([0.0, 0.0, 1.0]), Vec3::new3([0.0, 1.0, 0.0])), 50.0f32.to_radians(), size.width as f32 / size.height as f32, 0.001, 3000.0);
+
+        
+        let simulation_parameters = SimulationParameters {
+            gravity_position: Vec3::new3([0.0, 0.0, 0.0]),
+            gravity_strength: 3.0,
+            _padding: 0.0,
+            _padding2: 0.0,
+            _padding3: 0.0,
+        };
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
@@ -98,12 +118,47 @@ impl State {
 
         let render_shader = device.create_shader_module(wgpu::include_wgsl!("render.wgsl"));
 
+        let render_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Render Uniform Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ]
+        });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[Some(&render_uniform_bind_group_layout)],
                 immediate_size: 0,
             });
+
+        let render_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Render Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[camera.get_render_uniforms()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let render_uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Render Uniform Bind Group"),
+            layout: &render_uniform_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: render_uniform_buffer.as_entire_binding(),
+                }
+            ]
+        });
+
+        let depth_texture = Texture::create_depth_texture(&device, &config, "Depth Texture");
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
@@ -136,7 +191,13 @@ impl State {
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
-            depth_stencil: None, // 1.
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }), // 1.
             multisample: wgpu::MultisampleState {
                 count: 1, // 2.
                 mask: !0, // 3.
@@ -147,6 +208,39 @@ impl State {
         });
 
         let update_particle_shader = device.create_shader_module(wgpu::include_wgsl!("compute.wgsl"));
+
+        let simulation_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Simulation Uniform Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ]
+        });
+
+        let simulation_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Simulation Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[simulation_parameters]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let simulation_uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Simulation Uniform Bind Group"),
+            layout: &simulation_uniform_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: simulation_uniform_buffer.as_entire_binding(),
+                }
+            ]
+        });
 
         let compute_buffers_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Compute Buffers Bind Group Layout"),
@@ -177,7 +271,8 @@ impl State {
         let update_particle_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Particle Update Compute Pipeline Layout"),
             bind_group_layouts: &[
-                Some(&compute_buffers_bind_group_layout)
+                Some(&compute_buffers_bind_group_layout),
+                Some(&simulation_uniform_bind_group_layout)
             ],
             immediate_size: 0,
         });
@@ -191,34 +286,15 @@ impl State {
             cache: None
         });
 
-        let lifetime_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Particle Lifetime Buffer"),
-            usage: BufferUsages::STORAGE,
-            size: particle_count as u64 * mem::size_of::<ParticleLifetime>() as u64,
-            mapped_at_creation: false
-        });
+        let mut particle_chunks = Vec::new();
+        let mut particles_to_init = particle_count;
+        while particles_to_init != 0 {
+            let chunk_size = std::cmp::min(particles_to_init, device.limits().max_compute_workgroups_per_dimension);
+            particle_chunks.push(ParticleChunk::new(&device, &compute_buffers_bind_group_layout, chunk_size));
+            particles_to_init -= chunk_size;
+        }
 
-        let vertex_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Particle Vertex Buffer"),
-            usage: BufferUsages::STORAGE | BufferUsages::VERTEX,
-            size: particle_count as u64 * mem::size_of::<ParticleVertex>() as u64, 
-            mapped_at_creation: false
-        });
-
-        let compute_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Compute Bind Group"),
-            layout: &update_particle_compute_pipeline.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: lifetime_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: vertex_buffer.as_entire_binding(),
-                },
-            ]
-        });
+        println!("Created {} particle chunks", particle_chunks.len());
 
         let particle_init_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Particle Init Uniform Bind Group Layout"),
@@ -256,9 +332,23 @@ impl State {
             cache: None
         });
 
+        let init_sphere_particle_shader = device.create_shader_module(wgpu::include_wgsl!("init_sphere.wgsl"));
+        let particle_init_sphere_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Particle Init Sphere Compute Pipeline"),
+            layout: Some(&init_particle_pipeline_layout),
+            module: &init_sphere_particle_shader,
+            entry_point: Some("init_sphere"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None
+        });
+
         let particle_init_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Particle Init Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[0.01f32]),
+            contents: bytemuck::cast_slice(&[InitShapeUniforms {
+                spawn_density: 0u32,
+                current_particle_offset: 0u32,
+                size: 0.0f32
+            }]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
@@ -280,15 +370,24 @@ impl State {
             config,
             is_surface_configured: false,
             window,
+            depth_texture,
             render_pipeline,
+            render_uniform_bind_group,
+            render_uniform_buffer,
             update_particle_compute_pipeline,
-            lifetime_buffer,
-            vertex_buffer,
             particle_count,
-            compute_bind_group,
+            particle_chunks,
             particle_init_cube_pipeline,
+            particle_init_sphere_pipeline,
             particle_init_uniform_buffer,
-            particle_init_bind_group
+            particle_init_bind_group,
+
+            camera,
+            last_frame_time: Instant::now(),
+            simulation_parameters,
+            simulation_uniform_buffer,
+            simulation_uniform_bind_group,
+            last_cursor_position: (0.0, 0.0),
         })
     }
 
@@ -300,15 +399,23 @@ impl State {
             self.config.height = height;
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
+            self.camera.set_aspect_ratio(width as f32 / height as f32);
+            self.depth_texture = Texture::create_depth_texture(&self.device, &self.config, "Depth Texture");
         }
     }
 
     fn update(&mut self) {
-
+        let now = Instant::now();
+        let delta_time = (now - self.last_frame_time).as_secs_f32();
+        self.camera.update(delta_time);
+        self.simulation_parameters.gravity_position.w = delta_time;
+        self.queue.write_buffer(&self.simulation_uniform_buffer, 0, bytemuck::cast_slice(&[self.simulation_parameters]));
+        self.last_frame_time = now;
     }
     
     pub fn render(&mut self) -> anyhow::Result<()> {
         let start = Instant::now();
+        self.update();
         self.window.request_redraw();
 
         // We can't render unless the surface is configured
@@ -345,89 +452,164 @@ impl State {
             label: Some("Render Encoder"),
         });
 
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Particle Compute Pass"),
-                timestamp_writes: None
-            });
+        self.queue.write_buffer(&self.render_uniform_buffer, 0, bytemuck::cast_slice(&[self.camera.get_render_uniforms()]));
 
-            compute_pass.set_pipeline(&self.update_particle_compute_pipeline);
-            compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
-            compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
-            compute_pass.dispatch_workgroups(self.particle_count, 1, 1);
-        }
+        let mut load_ops = (wgpu::LoadOp::Clear(wgpu::Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        }), wgpu::LoadOp::Clear(1.0));
+        for particle_chunk in &self.particle_chunks {
+            {
+                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("Particle Update Compute Pass"),
+                    timestamp_writes: None
+                });
 
-        {
-            // 1.
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[
-                    // This is what @location(0) in the fragment shader targets
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        depth_slice: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(
-                                wgpu::Color {
-                                    r: 0.0,
-                                    g: 0.0,
-                                    b: 0.0,
-                                    a: 1.0,
-                                }
-                            ),
+                compute_pass.set_pipeline(&self.update_particle_compute_pipeline);
+                compute_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
+                particle_chunk.dispatch_update(&mut compute_pass);
+            }
+
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[
+                        // This is what @location(0) in the fragment shader targets
+                        Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load: load_ops.0,
+                                store: wgpu::StoreOp::Store,
+                            }
+                        })
+                    ],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: load_ops.1,
                             store: wgpu::StoreOp::Store,
-                        }
-                    })
-                ],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-
-            render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..self.particle_count, 0..1);
+                        }),
+                        stencil_ops: None,
+                    }),
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                    multiview_mask: None,
+                });
+                render_pass.set_pipeline(&self.render_pipeline);
+                render_pass.set_bind_group(0, &self.render_uniform_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, particle_chunk.get_vertex_buffer().slice(..));
+                render_pass.draw(0..particle_chunk.get_particle_count(), 0..1);
+            }
+            load_ops = (wgpu::LoadOp::Load, wgpu::LoadOp::Load);
         }
 
 
-        // submit will accept anything that implements IntoIter
-        self.queue.submit(std::iter::once(encoder.finish()));
+
+        self.queue.submit([encoder.finish()]);
         output.present();
 
         let end = Instant::now();
         let frame_time = (end - start).as_nanos() as f32 / 1_000_000f32;
-        self.window.set_title(format!("ParticleSystem | {:>9.3} ms", frame_time).as_str());
+        self.window.set_title(format!("ParticleSystem | {:>9.3} ms, {}/s", frame_time, 1000.0 / frame_time).as_str());
         Ok(())
 
     }
 
     pub fn init_particles_as_cube(&self) {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Init Cube Encoder"),
-        });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("Init Cube Compute Pass"),
-                timestamp_writes: None
+        
+        let mut current_offset = 0u32;
+        for particle_chunk in &self.particle_chunks {
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Init Cube Encoder"),
             });
+            {
+                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("Init Cube Compute Pass"),
+                    timestamp_writes: None
+                });
 
-            compute_pass.set_pipeline(&self.particle_init_cube_pipeline);
-            compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
-            compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
-            compute_pass.dispatch_workgroups(self.particle_count, 1, 1);
+                self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
+                    spawn_density: 9000u32,
+                    current_particle_offset: current_offset,
+                    size: 0.01
+                }]));
+                compute_pass.set_pipeline(&self.particle_init_cube_pipeline);
+                compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
+                particle_chunk.dispatch_update(&mut compute_pass);
+                current_offset += particle_chunk.get_particle_count();
+            }
+            self.queue.submit(std::iter::once(encoder.finish()));
         }
-        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn init_particles_as_sphere(&self) {
+        let mut current_offset = 0u32;
+        for particle_chunk in &self.particle_chunks {
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Init Sphere Encoder"),
+            });
+            {
+                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("Init Sphere Compute Pass"),
+                    timestamp_writes: None
+                });
+
+                self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
+                    spawn_density: self.particle_count,
+                    current_particle_offset: current_offset,
+                    size: 0.1
+                }]));
+                compute_pass.set_pipeline(&self.particle_init_sphere_pipeline);
+                compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
+                particle_chunk.dispatch_update(&mut compute_pass);
+                current_offset += particle_chunk.get_particle_count();
+            }
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
     }
 
     // impl State
-    pub fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+    pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         match (code, is_pressed) {
             (KeyCode::Escape, true) => event_loop.exit(),
             (KeyCode::Digit1, true) => {
                 self.init_particles_as_cube();
+            },
+            (KeyCode::Digit2, true) => {
+                self.init_particles_as_sphere();
+            },
+            _ => {
+                self.camera.handle_input(code, is_pressed);
+            }
+        }
+    }
+
+    pub fn handle_absolute_mouse_position(&mut self, x: f64, y: f64) {
+        self.last_cursor_position = (x as f32, y as f32);
+    }
+
+    pub fn handle_mouse_move(&mut self, delta_x: f64, delta_y: f64) {
+        self.camera.handle_mouse_movement(delta_x as f32, delta_y as f32);
+    }
+
+    pub fn handle_mouse_button(&mut self, button: winit::event::MouseButton, is_pressed: bool) {
+        match button {
+            winit::event::MouseButton::Right => {
+                self.camera.handle_mouse_button(button, is_pressed);
+            }
+            winit::event::MouseButton::Left => {
+                if is_pressed {
+                    // set gravity center under mouse cursor depending on the last cursor position and the camera's view and projection matrices
+                    let (x, y) = self.last_cursor_position;
+                    self.camera.get_direction_from_screen_coordinates(x, y, self.config.width as f32, self.config.height as f32).map(|dir| {
+                        let gravity_position = self.camera.get_position() + -dir * 6.0;
+                        self.simulation_parameters.gravity_position = gravity_position;
+                    });
+                }
             }
             _ => {}
         }
