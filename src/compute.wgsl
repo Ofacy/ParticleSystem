@@ -24,15 +24,18 @@ var<storage, read_write> particle_vertices: array<ParticleVertex>;
 var<uniform> simulation_uniforms: SimulationUniforms;
 
 @compute
-@workgroup_size(64)
+@workgroup_size(64, 1, 1)
 fn update_particle(
     @builtin(global_invocation_id) global_invocation_id: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>
 ) {
-    let gravity_direction = simulation_uniforms.gravity_position - particle_vertices[global_invocation_id.x].position;
+    let workgroup_size = vec3<u32>(64, 1, 1);
+    let particle_index = global_invocation_id.x + (global_invocation_id.y * workgroup_size.x * num_workgroups.x) +( global_invocation_id.z * workgroup_size.x * workgroup_size.y * num_workgroups.x * num_workgroups.y);
+    let gravity_direction = simulation_uniforms.gravity_position - particle_vertices[particle_index].position;
     let gravity_distance = length(gravity_direction);
-    particle_lifetimes[global_invocation_id.x].lifetime -= simulation_uniforms.delta_time;
-    particle_lifetimes[global_invocation_id.x].velocity += gravity_direction * simulation_uniforms.gravity_strength * simulation_uniforms.delta_time / (gravity_distance * gravity_distance);
-    particle_vertices[global_invocation_id.x].position += particle_lifetimes[global_invocation_id.x].velocity * simulation_uniforms.delta_time;
-    particle_vertices[global_invocation_id.x].color = vec3<f32>(0.2, 1.0, 0.4) * 2.0 / gravity_distance;
+    particle_lifetimes[particle_index].lifetime -= simulation_uniforms.delta_time;
+    particle_lifetimes[particle_index].velocity += gravity_direction * simulation_uniforms.gravity_strength * simulation_uniforms.delta_time / (gravity_distance * gravity_distance);
+    particle_vertices[particle_index].position += particle_lifetimes[particle_index].velocity * simulation_uniforms.delta_time;
+    particle_vertices[particle_index].color = vec3<f32>(0.2, 0.8, 0.7) * 2.0 / gravity_distance;
 }
 

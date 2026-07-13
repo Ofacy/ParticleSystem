@@ -1,4 +1,4 @@
-use crate::{matrix4::Matrix4, quaternion::Quaternion, render_uniforms::RenderUniforms, vector::Vec3};
+use crate::{matrix4::Matrix4, quaternion::Quaternion, render_uniforms::RenderUniforms, vector::{Vec3, Vec4}};
 use winit::keyboard::KeyCode;
 
 pub struct Camera {
@@ -52,21 +52,23 @@ impl Camera {
 	}
 
 	pub fn get_direction_from_screen_coordinates(&self, x: f32, y: f32, width: f32, height: f32) -> Option<Vec3> {
-		let ndc = Vec3::new3([
-			1.0 - (x / width) * 2.0,
-			(y / height) * 2.0 - 1.0,
-			1.0,
+		let aspect_ratio = width / height;
+		let fov_rad = self.fov;
+		let tan_fov = (fov_rad / 2.0).tan();
+
+		// Convert screen coordinates to normalized device coordinates (NDC)
+		let ndc_x = (2.0 * x / width) - 1.0;
+		let ndc_y = 1.0 - (2.0 * y / height);
+
+		let dir_camera_space = Vec3::new3([
+			ndc_x * aspect_ratio * tan_fov,
+			ndc_y * tan_fov,
+			-1.0,
 		]);
 
-		let inv_projection = self.projection_matrix.inverse();
-		let inv_view = self.get_view_matrix().inverse();
+		let direction_world_space = self.rotation.to_matrix4().transform_direction(dir_camera_space).normalize();
+		Some(direction_world_space)
 
-		let clip_coords = Vec3::new3([ndc.x, ndc.y, -1.0]);
-		let eye_coords = inv_projection * clip_coords;
-		let world_coords = inv_view * eye_coords;
-		let direction = world_coords - self.position;
-
-		Some(direction.normalize())
 	}
 
 	pub fn update(&mut self, delta_time: f32) {

@@ -34,11 +34,15 @@ fn get_jitter_offset(index: u32, particle_count_per_axis: u32, size: f32) -> f32
 }
 
 @compute
-@workgroup_size(64)
+@workgroup_size(64, 1, 1)
 fn init_cube(
-    @builtin(global_invocation_id) global_invocation_id: vec3<u32>
+    @builtin(global_invocation_id) global_invocation_id: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>
 ) {
-    let real_index = global_invocation_id.x + init_cube_uniforms.current_particle_offset;
+    let workgroup_size = vec3<u32>(64, 1, 1);
+    let particle_index = global_invocation_id.x;
+
+    let real_index = particle_index + init_cube_uniforms.current_particle_offset;
     let particle_count_per_axis = get_particle_count_per_axis();
     var position = vec3<f32>(
         
@@ -46,9 +50,9 @@ fn init_cube(
         f32((real_index / particle_count_per_axis) % particle_count_per_axis) * init_cube_uniforms.size - (init_cube_uniforms.size * f32(particle_count_per_axis) / 2.0) + get_jitter_offset(real_index, particle_count_per_axis, init_cube_uniforms.size),
         f32(real_index / (particle_count_per_axis * particle_count_per_axis)) * init_cube_uniforms.size - (init_cube_uniforms.size * f32(particle_count_per_axis) / 2.0) + get_jitter_offset(real_index, particle_count_per_axis, init_cube_uniforms.size)
     );
-    particle_lifetimes[global_invocation_id.x].velocity = vec3<f32>(0.0, 0.0, 0.0);
-    particle_lifetimes[global_invocation_id.x].lifetime = 0.0;
-    particle_vertices[global_invocation_id.x].position = position;
-    particle_vertices[global_invocation_id.x].color = vec3<f32>(1.0, 1.0, 1.0);
+    particle_vertices[particle_index].position = position;
+    particle_vertices[particle_index].color = vec3<f32>(1.0, 1.0, 1.0);
+    particle_lifetimes[particle_index].velocity = vec3<f32>(0.0, 0.0, 0.0);
+    particle_lifetimes[particle_index].lifetime = f32(real_index);
 }
 

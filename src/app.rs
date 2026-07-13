@@ -50,7 +50,7 @@ impl ApplicationHandler<State> for App {
         {
             // If we are not on web we can use pollster to
             // await the window creation
-            self.state = Some(pollster::block_on(State::new(window, 1_000_000)).unwrap());
+            self.state = Some(pollster::block_on(State::new(window, 50_000_000)).unwrap());
         }
 
         #[cfg(target_arch = "wasm32")]

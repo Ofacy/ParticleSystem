@@ -104,6 +104,14 @@ impl Matrix4 {
 			]
 		}
 	}
+
+	pub fn transform_direction(&self, direction: Vec3) -> Vec3 {
+		Vec3::new3([
+			self.data[0] * direction.x + self.data[4] * direction.y + self.data[8] * direction.z,
+			self.data[1] * direction.x + self.data[5] * direction.y + self.data[9] * direction.z,
+			self.data[2] * direction.x + self.data[6] * direction.y + self.data[10] * direction.z
+		])
+	}
 }
 
 impl Mul for Matrix4 {

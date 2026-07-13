@@ -264,7 +264,7 @@ impl State {
                         min_binding_size: None,
                     },
                     count: None,
-                },
+                }
             ]
         });
 
@@ -289,9 +289,9 @@ impl State {
         let mut particle_chunks = Vec::new();
         let mut particles_to_init = particle_count;
         while particles_to_init != 0 {
-            let chunk_size = std::cmp::min(particles_to_init, device.limits().max_compute_workgroups_per_dimension);
-            particle_chunks.push(ParticleChunk::new(&device, &compute_buffers_bind_group_layout, chunk_size));
-            particles_to_init -= chunk_size;
+            let chunk = ParticleChunk::new(&device, &compute_buffers_bind_group_layout, particles_to_init);
+            particles_to_init -= chunk.get_particle_count();
+            particle_chunks.push(chunk);
         }
 
         println!("Created {} particle chunks", particle_chunks.len());
@@ -514,7 +514,7 @@ impl State {
 
         let end = Instant::now();
         let frame_time = (end - start).as_nanos() as f32 / 1_000_000f32;
-        self.window.set_title(format!("ParticleSystem | {:>9.3} ms, {}/s", frame_time, 1000.0 / frame_time).as_str());
+        self.window.set_title(format!("ParticleSystem running {} particles | {:>9.3} ms, {}/s", self.particle_count, frame_time, 1000.0 / frame_time).as_str());
         Ok(())
 
     }
@@ -533,7 +533,7 @@ impl State {
                 });
 
                 self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
-                    spawn_density: 9000u32,
+                    spawn_density: 13000u32,
                     current_particle_offset: current_offset,
                     size: 0.01
                 }]));
@@ -561,7 +561,7 @@ impl State {
                 self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
                     spawn_density: self.particle_count,
                     current_particle_offset: current_offset,
-                    size: 0.1
+                    size: 2.0
                 }]));
                 compute_pass.set_pipeline(&self.particle_init_sphere_pipeline);
                 compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
@@ -581,6 +581,9 @@ impl State {
             },
             (KeyCode::Digit2, true) => {
                 self.init_particles_as_sphere();
+            },
+            (KeyCode::F12, true) => {
+                self.init_particles_as_cube();
             },
             _ => {
                 self.camera.handle_input(code, is_pressed);
@@ -606,7 +609,7 @@ impl State {
                     // set gravity center under mouse cursor depending on the last cursor position and the camera's view and projection matrices
                     let (x, y) = self.last_cursor_position;
                     self.camera.get_direction_from_screen_coordinates(x, y, self.config.width as f32, self.config.height as f32).map(|dir| {
-                        let gravity_position = self.camera.get_position() + -dir * 6.0;
+                        let gravity_position = self.camera.get_position() + dir * 6.0;
                         self.simulation_parameters.gravity_position = gravity_position;
                     });
                 }
