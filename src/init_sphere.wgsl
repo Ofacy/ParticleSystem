@@ -58,7 +58,7 @@ fn init_sphere(
         init_sphere_uniforms.radius * cos(theta)
     );
     particle_lifetimes[particle_index].velocity = vec3<f32>(0.0, 0.0, 0.0);
-    particle_lifetimes[particle_index].lifetime = init_sphere_uniforms.starting_lifetime.x + fract(sin(f32(real_index))) * (init_sphere_uniforms.starting_lifetime.y - init_sphere_uniforms.starting_lifetime.x);
+    particle_lifetimes[particle_index].lifetime = init_sphere_uniforms.starting_lifetime.x + fract(sin(f32(real_index) * 0.129898)) * (init_sphere_uniforms.starting_lifetime.y - init_sphere_uniforms.starting_lifetime.x);
     particle_vertices[particle_index].position = position;
 }
 

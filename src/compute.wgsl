@@ -25,15 +25,19 @@ var<storage, read_write> particle_vertices: array<ParticleVertex>;
 @group(1) @binding(0)
 var<uniform> simulation_uniforms: SimulationUniforms;
 
-fn random_in_sphere(seed: vec3<f32>) -> vec3<f32> {
-    let u = fract(sin(dot(seed, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
-    let v = fract(sin(dot(seed + 1.0, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
-    let theta = u * 2.0 * 3.14159265358979323846;
-    let phi = acos(2.0 * v - 1.0);
-    let x = sin(phi) * cos(theta);
-    let y = sin(phi) * sin(theta);
-    let z = cos(phi);
-    return vec3<f32>(x, y, z);
+fn random_in_sphere(seed: f32) -> vec3<f32> {
+    let random_value1 = fract(sin(seed * 12.9898) * 43758.5453);
+    let random_value2 = fract(sin((seed + 1.0) * 12.9898) * 43758.5453);
+    let random_value3 = fract(sin((seed + 2.0) * 12.9898) * 43758.5453);
+    let theta = random_value1 * 2.0 * 3.14159265358979323846;
+    let phi = acos(1.0 - 2.0 * random_value2);
+    let r = pow(random_value3, 1.0 / 3.0);
+
+    return vec3<f32>(
+        r * sin(phi) * cos(theta),
+        r * sin(phi) * sin(theta),
+        r * cos(phi)
+    );
 }
 
 @compute
@@ -52,9 +56,9 @@ fn update_particle(
     let lifetime = particle_lifetimes[particle_index].lifetime - simulation_uniforms.delta_time;
     if (lifetime < 0.0) {
         particle_lifetimes[particle_index].lifetime = simulation_uniforms.starting_lifetime;
-        particle_vertices[particle_index].position = simulation_uniforms.starting_position + random_in_sphere(vec3<f32>(f32(particle_index * 1u), f32(particle_index * 2u), f32(particle_index * 3u))) * simulation_uniforms.starting_position_radius;
+        particle_vertices[particle_index].position = simulation_uniforms.starting_position + random_in_sphere(f32(particle_index)) * simulation_uniforms.starting_position_radius;
 
-        particle_lifetimes[particle_index].velocity = random_in_sphere(vec3<f32>(f32(particle_index * 4u), f32(particle_index * 5u), f32(particle_index * 6u))) * 0.3;
+        particle_lifetimes[particle_index].velocity = random_in_sphere(f32(particle_index + 1)) * 0.3;
         //particle_lifetimes[particle_index].velocity = vec3<f32>(0.0, 0.0, 420.0);
         return;
     }
