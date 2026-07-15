@@ -12,11 +12,22 @@ struct VertexOutput {
 
 struct ParticleVertex {
     @location(0) position: vec3<f32>,
-    @location(1) color: vec3<f32>
+}
+
+struct SimulationUniforms {
+    gravity_position: vec3<f32>,
+    starting_position: vec3<f32>,
+    starting_position_radius: f32,
+    delta_time: f32,
+    gravity_strength: f32,
+    starting_lifetime: f32,
 }
 
 @group(0) @binding(0)
 var<uniform> render_uniforms: RenderUniforms;
+
+@group(1) @binding(0)
+var<uniform> simulation_uniforms: SimulationUniforms;
 
 @vertex
 fn vs_main(
@@ -25,7 +36,7 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
 
-    out.color = in.color;
+    out.color = vec3<f32>(0.2, 0.8, 0.7) * 2.0 / length(simulation_uniforms.gravity_position - in.position);
     out.clip_position = render_uniforms.projection * render_uniforms.view * vec4<f32>(in.position, 1.0);
     return out;
 }

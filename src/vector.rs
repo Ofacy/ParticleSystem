@@ -28,6 +28,10 @@ impl Vec3 {
 		Vec4 { x: data[0], y: data[1], z: data[2], w: 0.0 }
 	}
 
+	pub fn xyz(&self) -> [f32; 3] {
+		[self.x, self.y, self.z]
+	}
+
 	pub fn length(self) -> f32 {
 		(self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt()
 	}

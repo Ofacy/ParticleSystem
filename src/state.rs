@@ -50,11 +50,13 @@ impl State {
 
         
         let simulation_parameters = SimulationParameters {
-            gravity_position: Vec3::new3([0.0, 0.0, 0.0]),
+            gravity_position: [0.0, 0.0, 0.0, 0.0],
             gravity_strength: 3.0,
-            _padding: 0.0,
-            _padding2: 0.0,
-            _padding3: 0.0,
+            starting_position: [0.0, 0.0, 0.0],
+            starting_position_radius: 1.0,
+            starting_lifetime: 30.0,
+            delta_time: 0.0,
+            _padding: [0.0, 0.0],
         };
 
         // The instance is a handle to our GPU
@@ -118,6 +120,22 @@ impl State {
 
         let render_shader = device.create_shader_module(wgpu::include_wgsl!("render.wgsl"));
 
+        let simulation_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Simulation Uniform Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ]
+        });
+
         let render_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Render Uniform Bind Group Layout"),
             entries: &[
@@ -137,7 +155,7 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[Some(&render_uniform_bind_group_layout)],
+                bind_group_layouts: &[Some(&render_uniform_bind_group_layout), Some(&simulation_uniform_bind_group_layout)],
                 immediate_size: 0,
             });
 
@@ -154,6 +172,23 @@ impl State {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: render_uniform_buffer.as_entire_binding(),
+                }
+            ]
+        });
+
+        let simulation_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Simulation Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[simulation_parameters]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let simulation_uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Simulation Uniform Bind Group"),
+            layout: &simulation_uniform_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: simulation_uniform_buffer.as_entire_binding(),
                 }
             ]
         });
@@ -208,39 +243,6 @@ impl State {
         });
 
         let update_particle_shader = device.create_shader_module(wgpu::include_wgsl!("compute.wgsl"));
-
-        let simulation_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Simulation Uniform Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ]
-        });
-
-        let simulation_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Simulation Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[simulation_parameters]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let simulation_uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Simulation Uniform Bind Group"),
-            layout: &simulation_uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: simulation_uniform_buffer.as_entire_binding(),
-                }
-            ]
-        });
 
         let compute_buffers_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Compute Buffers Bind Group Layout"),
@@ -347,7 +349,9 @@ impl State {
             contents: bytemuck::cast_slice(&[InitShapeUniforms {
                 spawn_density: 0u32,
                 current_particle_offset: 0u32,
-                size: 0.0f32
+                size: 0.0f32,
+                starting_lifetime: [5.0f32, 15.0f32],
+                _padding: [0.0f32]
             }]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
@@ -408,7 +412,7 @@ impl State {
         let now = Instant::now();
         let delta_time = (now - self.last_frame_time).as_secs_f32();
         self.camera.update(delta_time);
-        self.simulation_parameters.gravity_position.w = delta_time;
+        self.simulation_parameters.delta_time = delta_time;
         self.queue.write_buffer(&self.simulation_uniform_buffer, 0, bytemuck::cast_slice(&[self.simulation_parameters]));
         self.last_frame_time = now;
     }
@@ -501,6 +505,7 @@ impl State {
                 });
                 render_pass.set_pipeline(&self.render_pipeline);
                 render_pass.set_bind_group(0, &self.render_uniform_bind_group, &[]);
+                render_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, particle_chunk.get_vertex_buffer().slice(..));
                 render_pass.draw(0..particle_chunk.get_particle_count(), 0..1);
             }
@@ -535,7 +540,9 @@ impl State {
                 self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
                     spawn_density: 13000u32,
                     current_particle_offset: current_offset,
-                    size: 0.01
+                    size: 0.01,
+                    starting_lifetime: [0.0f32, 40.0f32],
+                    _padding: [0.0f32]
                 }]));
                 compute_pass.set_pipeline(&self.particle_init_cube_pipeline);
                 compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
@@ -561,7 +568,9 @@ impl State {
                 self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
                     spawn_density: self.particle_count,
                     current_particle_offset: current_offset,
-                    size: 2.0
+                    size: 3.0,
+                    starting_lifetime: [f32::MAX, f32::MAX],
+                    _padding: [0.0f32]
                 }]));
                 compute_pass.set_pipeline(&self.particle_init_sphere_pipeline);
                 compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
@@ -610,7 +619,7 @@ impl State {
                     let (x, y) = self.last_cursor_position;
                     self.camera.get_direction_from_screen_coordinates(x, y, self.config.width as f32, self.config.height as f32).map(|dir| {
                         let gravity_position = self.camera.get_position() + dir * 6.0;
-                        self.simulation_parameters.gravity_position = gravity_position;
+                        self.simulation_parameters.gravity_position = [gravity_position.x, gravity_position.y, gravity_position.z, 1.0];
                     });
                 }
             }

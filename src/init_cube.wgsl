@@ -5,10 +5,10 @@ struct ParticleLifetime {
 }
 struct ParticleVertex {
     @location(0) position: vec3<f32>,
-    @location(1) color: vec3<f32>
 }
 
 struct InitCubeUniforms {
+    starting_lifetime: vec2<f32>,
     current_particle_offset: u32,
     spawn_density: u32,
     size: f32,
@@ -40,7 +40,10 @@ fn init_cube(
     @builtin(num_workgroups) num_workgroups: vec3<u32>
 ) {
     let workgroup_size = vec3<u32>(64, 1, 1);
-    let particle_index = global_invocation_id.x;
+    let particle_index = 
+        global_invocation_id.x +
+        (global_invocation_id.y * workgroup_size.x * num_workgroups.x) +
+        (global_invocation_id.z * workgroup_size.x * workgroup_size.y * num_workgroups.x * num_workgroups.y);
 
     let real_index = particle_index + init_cube_uniforms.current_particle_offset;
     let particle_count_per_axis = get_particle_count_per_axis();
@@ -51,8 +54,7 @@ fn init_cube(
         f32(real_index / (particle_count_per_axis * particle_count_per_axis)) * init_cube_uniforms.size - (init_cube_uniforms.size * f32(particle_count_per_axis) / 2.0) + get_jitter_offset(real_index, particle_count_per_axis, init_cube_uniforms.size)
     );
     particle_vertices[particle_index].position = position;
-    particle_vertices[particle_index].color = vec3<f32>(1.0, 1.0, 1.0);
     particle_lifetimes[particle_index].velocity = vec3<f32>(0.0, 0.0, 0.0);
-    particle_lifetimes[particle_index].lifetime = f32(real_index);
+    particle_lifetimes[particle_index].lifetime = init_cube_uniforms.starting_lifetime.x + fract(sin(f32(real_index))) * (init_cube_uniforms.starting_lifetime.y - init_cube_uniforms.starting_lifetime.x);
 }
 
