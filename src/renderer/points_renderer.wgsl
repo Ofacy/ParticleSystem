@@ -1,6 +1,6 @@
 // Vertex shader
 
-struct RenderUniforms {
+struct ViewProjectionUniforms {
     projection: mat4x4<f32>,
     view: mat4x4<f32>,
 }
@@ -24,7 +24,7 @@ struct SimulationUniforms {
 }
 
 @group(0) @binding(0)
-var<uniform> render_uniforms: RenderUniforms;
+var<uniform> view_proj_uniforms: ViewProjectionUniforms;
 
 @group(1) @binding(0)
 var<uniform> simulation_uniforms: SimulationUniforms;
@@ -37,7 +37,7 @@ fn vs_main(
     var out: VertexOutput;
 
     out.color = vec3<f32>(0.2, 0.8, 0.7) * 2.0 / length(simulation_uniforms.gravity_position - in.position);
-    out.clip_position = render_uniforms.projection * render_uniforms.view * vec4<f32>(in.position, 1.0);
+    out.clip_position = view_proj_uniforms.projection * view_proj_uniforms.view * vec4<f32>(in.position, 1.0);
     return out;
 }
 

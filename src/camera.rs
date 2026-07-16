@@ -1,4 +1,4 @@
-use crate::{matrix4::Matrix4, quaternion::Quaternion, render_uniforms::RenderUniforms, vector::{Vec3, Vec4}};
+use crate::{matrix4::Matrix4, quaternion::Quaternion, view_proj_uniforms::ViewProjectionUniforms, vector::{Vec3}};
 use winit::keyboard::KeyCode;
 
 pub struct Camera {
@@ -24,8 +24,8 @@ impl Camera {
 		}
 	}
 
-	pub fn get_render_uniforms(&self) -> RenderUniforms {
-		RenderUniforms {
+	pub fn get_render_uniforms(&self) -> ViewProjectionUniforms {
+		ViewProjectionUniforms {
 			view: self.get_view_matrix(),
 			projection: self.projection_matrix,
 		}

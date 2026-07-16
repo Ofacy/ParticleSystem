@@ -5,13 +5,14 @@ mod particle_lifetime;
 mod particle_vertex;
 mod particle_chunk;
 mod init_shape;
-mod render_uniforms;
+mod view_proj_uniforms;
 mod simulation_parameters;
 mod camera;
 mod matrix4;
 mod vector;
 mod quaternion;
 mod texture;
+mod renderer;
 
 use winit::event_loop::EventLoop;
 

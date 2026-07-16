@@ -4,7 +4,7 @@ use std::{sync::Arc, time::Instant};
 use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor, util::{BufferInitDescriptor, DeviceExt}};
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use crate::{camera::Camera, init_shape::InitShapeUniforms, matrix4::Matrix4, particle_chunk::ParticleChunk, particle_vertex::ParticleVertex, quaternion::Quaternion, render_uniforms::RenderUniforms, simulation_parameters::{self, SimulationParameters}, texture::Texture, vector::Vec3};
+use crate::{camera::Camera, init_shape::InitShapeUniforms, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::{renderer::Renderer, renderers::Renderers}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
 
 
 
@@ -17,7 +17,7 @@ pub struct State {
     is_surface_configured: bool,
     window: Arc<Window>,
     depth_texture: Texture,
-    render_pipeline: wgpu::RenderPipeline,
+    renderers: Renderers,
     render_uniform_bind_group: wgpu::BindGroup,
     render_uniform_buffer: wgpu::Buffer,
 
@@ -118,8 +118,6 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        let render_shader = device.create_shader_module(wgpu::include_wgsl!("render.wgsl"));
-
         let simulation_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Simulation Uniform Bind Group Layout"),
             entries: &[
@@ -151,13 +149,6 @@ impl State {
                 }
             ]
         });
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[Some(&render_uniform_bind_group_layout), Some(&simulation_uniform_bind_group_layout)],
-                immediate_size: 0,
-            });
 
         let render_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Render Uniform Buffer"),
@@ -194,53 +185,6 @@ impl State {
         });
 
         let depth_texture = Texture::create_depth_texture(&device, &config, "Depth Texture");
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &render_shader,
-                entry_point: Some("vs_main"), // 1.
-                buffers: &[ParticleVertex::desc()], // 2.
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState { // 3.
-                module: &render_shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState { // 4.
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::PointList, // 1.
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw, // 2.
-                cull_mode: None,
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }), // 1.
-            multisample: wgpu::MultisampleState {
-                count: 1, // 2.
-                mask: !0, // 3.
-                alpha_to_coverage_enabled: false, // 4.
-            },
-            multiview_mask: None, // 5.
-            cache: None, // 6.
-        });
 
         let update_particle_shader = device.create_shader_module(wgpu::include_wgsl!("compute.wgsl"));
 
@@ -367,6 +311,8 @@ impl State {
             ]
         });
 
+        let renderers = Renderers::new(&device, &simulation_uniform_bind_group_layout, &render_uniform_bind_group_layout, &config);
+
         Ok(Self {
             surface,
             device,
@@ -375,7 +321,7 @@ impl State {
             is_surface_configured: false,
             window,
             depth_texture,
-            render_pipeline,
+            renderers,
             render_uniform_bind_group,
             render_uniform_buffer,
             update_particle_compute_pipeline,
@@ -477,37 +423,15 @@ impl State {
             }
 
             {
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Render Pass"),
-                    color_attachments: &[
-                        // This is what @location(0) in the fragment shader targets
-                        Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            depth_slice: None,
-                            ops: wgpu::Operations {
-                                load: load_ops.0,
-                                store: wgpu::StoreOp::Store,
-                            }
-                        })
-                    ],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: load_ops.1,
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    }),
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                    multiview_mask: None,
-                });
-                render_pass.set_pipeline(&self.render_pipeline);
-                render_pass.set_bind_group(0, &self.render_uniform_bind_group, &[]);
-                render_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, particle_chunk.get_vertex_buffer().slice(..));
-                render_pass.draw(0..particle_chunk.get_particle_count(), 0..1);
+                self.renderers.get_points_renderer().render(
+                    particle_chunk,
+                    &mut encoder,
+                    &view,
+                    &self.depth_texture.view,
+                    &self.simulation_uniform_bind_group,
+                    &self.render_uniform_bind_group,
+                    load_ops
+                );
             }
             load_ops = (wgpu::LoadOp::Load, wgpu::LoadOp::Load);
         }
@@ -569,7 +493,7 @@ impl State {
                     spawn_density: self.particle_count,
                     current_particle_offset: current_offset,
                     size: 3.0,
-                    starting_lifetime: [f32::MAX, f32::MAX],
+                    starting_lifetime: [0.0f32, 30.0f32],
                     _padding: [0.0f32]
                 }]));
                 compute_pass.set_pipeline(&self.particle_init_sphere_pipeline);

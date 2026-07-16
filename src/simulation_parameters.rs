@@ -1,5 +1,3 @@
-use crate::vector::Vec3;
-
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
