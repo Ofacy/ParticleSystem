@@ -4,7 +4,7 @@ use std::{sync::Arc, time::Instant};
 use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor, util::{BufferInitDescriptor, DeviceExt}};
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use crate::{camera::Camera, init_shape::InitShapeUniforms, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::{renderer::Renderer, renderers::Renderers}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
+use crate::{camera::Camera, init_shape::InitShapeUniforms, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::{renderers::{RendererType, Renderers}}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
 
 
 
@@ -139,7 +139,7 @@ impl State {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -311,7 +311,7 @@ impl State {
             ]
         });
 
-        let renderers = Renderers::new(&device, &simulation_uniform_bind_group_layout, &render_uniform_bind_group_layout, &config);
+        let renderers = Renderers::new(&device, &particle_chunks, &simulation_uniform_bind_group_layout, &render_uniform_bind_group_layout, &config);
 
         Ok(Self {
             surface,
@@ -410,7 +410,7 @@ impl State {
             b: 0.0,
             a: 1.0,
         }), wgpu::LoadOp::Clear(1.0));
-        for particle_chunk in &self.particle_chunks {
+        for (chunk_index, particle_chunk) in self.particle_chunks.iter().enumerate() {
             {
                 let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                     label: Some("Particle Update Compute Pass"),
@@ -423,8 +423,9 @@ impl State {
             }
 
             {
-                self.renderers.get_points_renderer().render(
+                self.renderers.get_renderer(RendererType::Points).render_chunk(
                     particle_chunk,
+                    chunk_index,
                     &mut encoder,
                     &view,
                     &self.depth_texture.view,
@@ -436,7 +437,14 @@ impl State {
             load_ops = (wgpu::LoadOp::Load, wgpu::LoadOp::Load);
         }
 
-
+        self.renderers.get_renderer(RendererType::Points).render_frame(
+            &mut encoder,
+            &view,
+            &self.depth_texture.view,
+            &self.simulation_uniform_bind_group,
+            &self.render_uniform_bind_group,
+            load_ops
+        );
 
         self.queue.submit([encoder.finish()]);
         output.present();
@@ -464,8 +472,8 @@ impl State {
                 self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
                     spawn_density: 13000u32,
                     current_particle_offset: current_offset,
-                    size: 0.01,
-                    starting_lifetime: [0.0f32, 40.0f32],
+                    size: 0.001,
+                    starting_lifetime: [f32::MAX, f32::MAX],
                     _padding: [0.0f32]
                 }]));
                 compute_pass.set_pipeline(&self.particle_init_cube_pipeline);
@@ -492,8 +500,8 @@ impl State {
                 self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
                     spawn_density: self.particle_count,
                     current_particle_offset: current_offset,
-                    size: 3.0,
-                    starting_lifetime: [0.0f32, 30.0f32],
+                    size: 1.0,
+                    starting_lifetime: [f32::MAX, f32::MAX],
                     _padding: [0.0f32]
                 }]));
                 compute_pass.set_pipeline(&self.particle_init_sphere_pipeline);
