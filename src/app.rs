@@ -50,7 +50,7 @@ impl ApplicationHandler<State> for App {
         {
             // If we are not on web we can use pollster to
             // await the window creation
-            self.state = Some(pollster::block_on(State::new(window, 8380416)).unwrap());
+            self.state = Some(pollster::block_on(State::new(window, 8_380_416)).unwrap());
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -95,6 +95,11 @@ impl ApplicationHandler<State> for App {
             Some(canvas) => canvas,
             None => return,
         };
+
+        if state.egui_renderer.handle_input(&mut state.window, &event).consumed {
+            println!("Egui consumed event: {:?}", event);
+            return;
+        }
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),

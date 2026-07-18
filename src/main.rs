@@ -13,6 +13,7 @@ mod vector;
 mod quaternion;
 mod texture;
 mod renderer;
+mod egui_renderer;
 
 use winit::event_loop::EventLoop;
 

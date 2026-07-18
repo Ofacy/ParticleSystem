@@ -6,12 +6,13 @@ pub struct PointsRenderer {
 	pipeline: wgpu::RenderPipeline,
 	uniform_buffer: wgpu::Buffer,
 	uniform_bind_group: wgpu::BindGroup,
+	uniform: PointsRendererUniforms,
 }
  
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PointsRendererUniforms {
-	color: [f32; 4],
+	pub color: [f32; 4],
 }
 
 impl PointsRenderer {
@@ -27,7 +28,7 @@ impl PointsRenderer {
 			label: Some("Points Renderer Uniform Buffer"),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 			contents: bytemuck::cast_slice(&[PointsRendererUniforms {
-				color: [0.3, 0.7, 0.9, 0.2], // Example color (RGBA)
+				color: [0.8, 0.1, 0.1, 0.2], // Example color (RGBA)
 			}]),
 		});
 
@@ -106,11 +107,19 @@ impl PointsRenderer {
 			}),
 			uniform_buffer,
 			uniform_bind_group,
+			uniform: PointsRendererUniforms {
+				color: [0.8, 0.1, 0.1, 0.2], // Example color (RGBA)
+			},
 		}
 	}
 
-	pub fn update_uniforms(&self, queue: &wgpu::Queue, uniforms: PointsRendererUniforms) {;
+	pub fn update_uniforms(&mut self, queue: &wgpu::Queue, uniforms: PointsRendererUniforms) {
+		self.uniform = uniforms;
 		queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+	}
+
+	pub fn get_uniforms(&self) -> PointsRendererUniforms {
+		self.uniform
 	}
 }
 

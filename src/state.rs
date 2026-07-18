@@ -1,10 +1,12 @@
 use core::f32;
 use std::{sync::Arc, time::Instant};
 
+use egui::Grid;
+use egui_wgpu::{ScreenDescriptor};
 use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor, util::{BufferInitDescriptor, DeviceExt}};
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use crate::{camera::Camera, init_shape::InitShapeUniforms, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::{renderers::{RendererType, Renderers}}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
+use crate::{camera::Camera, egui_renderer::EguiRenderer, init_shape::InitShapeUniforms, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::renderers::{RendererType, Renderers}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
 
 
 
@@ -15,7 +17,7 @@ pub struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
-    window: Arc<Window>,
+    pub window: Arc<Window>,
     depth_texture: Texture,
     renderers: Renderers,
     render_uniform_bind_group: wgpu::BindGroup,
@@ -38,6 +40,8 @@ pub struct State {
     camera: Camera,
     last_frame_time: Instant,
     last_cursor_position: (f32, f32),
+    is_left_mouse_button_pressed: bool,
+    pub egui_renderer: EguiRenderer
 }
 
 impl State {
@@ -54,7 +58,7 @@ impl State {
             gravity_strength: 3.0,
             starting_position: [0.0, 0.0, 0.0],
             starting_position_radius: 1.0,
-            starting_lifetime: 30.0,
+            starting_lifetime: 40.0,
             delta_time: 0.0,
             _padding: [0.0, 0.0],
         };
@@ -313,6 +317,9 @@ impl State {
 
         let renderers = Renderers::new(&device, &particle_chunks, &simulation_uniform_bind_group_layout, &render_uniform_bind_group_layout, &config);
 
+        let egui_renderer = EguiRenderer::new(&device, surface_format, 
+            1, &window);
+
         Ok(Self {
             surface,
             device,
@@ -330,14 +337,15 @@ impl State {
             particle_init_cube_pipeline,
             particle_init_sphere_pipeline,
             particle_init_uniform_buffer,
-            particle_init_bind_group,
-
+            particle_init_bind_group,   
             camera,
             last_frame_time: Instant::now(),
             simulation_parameters,
             simulation_uniform_buffer,
             simulation_uniform_bind_group,
             last_cursor_position: (0.0, 0.0),
+            is_left_mouse_button_pressed: false,
+            egui_renderer
         })
     }
 
@@ -445,8 +453,28 @@ impl State {
             &self.render_uniform_bind_group,
             load_ops
         );
+        
+        {
+            self.egui_renderer.run_ui(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &self.window,
+                &view,
+                ScreenDescriptor {
+                    size_in_pixels: [self.config.width, self.config.height],
+                    pixels_per_point: self.window.scale_factor() as f32,
+                }, |ui| {
+                    Grid::new("grid").num_columns(2).show(ui, |ui| {
+                        ui.label("Gravity Strength");
+                        ui.add(egui::Slider::new(&mut self.simulation_parameters.gravity_strength, 0.0..=10.0));
+                        ui.end_row();
+                    });
+                });
+        }
 
         self.queue.submit([encoder.finish()]);
+
         output.present();
 
         let end = Instant::now();
@@ -537,6 +565,13 @@ impl State {
     }
 
     pub fn handle_mouse_move(&mut self, delta_x: f64, delta_y: f64) {
+        if self.is_left_mouse_button_pressed {
+            let (x, y) = self.last_cursor_position;
+            self.camera.get_direction_from_screen_coordinates(x, y, self.config.width as f32, self.config.height as f32).map(|dir| {
+                let gravity_position = self.camera.get_position() + dir * 6.0;
+                self.simulation_parameters.gravity_position = [gravity_position.x, gravity_position.y, gravity_position.z, 1.0];
+            });
+        }
         self.camera.handle_mouse_movement(delta_x as f32, delta_y as f32);
     }
 
@@ -554,6 +589,7 @@ impl State {
                         self.simulation_parameters.gravity_position = [gravity_position.x, gravity_position.y, gravity_position.z, 1.0];
                     });
                 }
+                self.is_left_mouse_button_pressed = is_pressed;
             }
             _ => {}
         }

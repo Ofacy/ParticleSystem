@@ -29,4 +29,10 @@ impl Renderers {
 			RendererType::Points => &self.points_renderer,
 		}
 	}
+
+	pub fn get_points_renderer(
+		&mut self,
+	) -> &mut PointsRenderer {
+		&mut self.points_renderer
+	}
 }
