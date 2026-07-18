@@ -455,9 +455,10 @@ impl State {
         );
         
         {
+            let queue = &self.queue;
             self.egui_renderer.run_ui(
                 &self.device,
-                &self.queue,
+                queue,
                 &mut encoder,
                 &self.window,
                 &view,
@@ -469,6 +470,11 @@ impl State {
                         ui.label("Gravity Strength");
                         ui.add(egui::Slider::new(&mut self.simulation_parameters.gravity_strength, 0.0..=10.0));
                         ui.end_row();
+                        ui.label("Particle Color");
+                        let mut uniform = self.renderers.get_points_renderer().get_uniforms();
+                        if ui.color_edit_button_rgba_unmultiplied(&mut uniform.color).changed() {
+                            self.renderers.get_points_renderer().update_uniforms(queue, uniform);
+                        }
                     });
                 });
         }

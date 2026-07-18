@@ -97,7 +97,6 @@ impl ApplicationHandler<State> for App {
         };
 
         if state.egui_renderer.handle_input(&mut state.window, &event).consumed {
-            println!("Egui consumed event: {:?}", event);
             return;
         }
 
