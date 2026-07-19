@@ -6,7 +6,7 @@ use egui_wgpu::{ScreenDescriptor};
 use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor, util::{BufferInitDescriptor, DeviceExt}};
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use crate::{camera::Camera, egui_renderer::EguiRenderer, init_shape::InitShapeUniforms, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::renderers::{RendererType, Renderers}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
+use crate::{camera::Camera, egui_renderer::EguiRenderer, init_shape::{InitShape, InitShapeType}, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::renderers::{RendererType, Renderers}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
 
 
 
@@ -24,17 +24,14 @@ pub struct State {
     render_uniform_buffer: wgpu::Buffer,
 
     update_particle_compute_pipeline: wgpu::ComputePipeline,
-    particle_init_cube_pipeline: wgpu::ComputePipeline,
-    particle_init_uniform_buffer: wgpu::Buffer,
-    particle_init_bind_group: wgpu::BindGroup,
-
-    particle_init_sphere_pipeline: wgpu::ComputePipeline,
+    init_shape: InitShape,
 
     particle_chunks: Vec<ParticleChunk>,
     simulation_uniform_buffer: wgpu::Buffer,
     simulation_uniform_bind_group: wgpu::BindGroup,
 
     simulation_parameters: SimulationParameters,
+    time_scale: f32,
     particle_count: u32,
 
     camera: Camera,
@@ -246,74 +243,7 @@ impl State {
 
         println!("Created {} particle chunks", particle_chunks.len());
 
-        let particle_init_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Particle Init Uniform Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ]
-        });
-
-        let init_particle_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Particle Init Compute Pipeline Layout"),
-            bind_group_layouts: &[
-                Some(&compute_buffers_bind_group_layout),
-                Some(&particle_init_bind_group_layout)
-            ],
-            immediate_size: 0,
-        });
-
-        let init_cube_particle_shader = device.create_shader_module(wgpu::include_wgsl!("init_cube.wgsl"));
-
-        let particle_init_cube_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Particle Init Cube Compute Pipeline"),
-            layout: Some(&init_particle_pipeline_layout),
-            module: &init_cube_particle_shader,
-            entry_point: Some("init_cube"),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None
-        });
-
-        let init_sphere_particle_shader = device.create_shader_module(wgpu::include_wgsl!("init_sphere.wgsl"));
-        let particle_init_sphere_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Particle Init Sphere Compute Pipeline"),
-            layout: Some(&init_particle_pipeline_layout),
-            module: &init_sphere_particle_shader,
-            entry_point: Some("init_sphere"),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None
-        });
-
-        let particle_init_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Particle Init Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[InitShapeUniforms {
-                spawn_density: 0u32,
-                current_particle_offset: 0u32,
-                size: 0.0f32,
-                starting_lifetime: [5.0f32, 15.0f32],
-                _padding: [0.0f32]
-            }]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let particle_init_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Particle Init Bind Group"),
-            layout: &particle_init_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: particle_init_uniform_buffer.as_entire_binding(),
-                }
-            ]
-        });
+        let init_shape = InitShape::new(&device, &compute_buffers_bind_group_layout);
 
         let renderers = Renderers::new(&device, &particle_chunks, &simulation_uniform_bind_group_layout, &render_uniform_bind_group_layout, &config);
 
@@ -334,13 +264,11 @@ impl State {
             update_particle_compute_pipeline,
             particle_count,
             particle_chunks,
-            particle_init_cube_pipeline,
-            particle_init_sphere_pipeline,
-            particle_init_uniform_buffer,
-            particle_init_bind_group,   
+            init_shape,
             camera,
             last_frame_time: Instant::now(),
             simulation_parameters,
+            time_scale: 1.0,
             simulation_uniform_buffer,
             simulation_uniform_bind_group,
             last_cursor_position: (0.0, 0.0),
@@ -366,7 +294,7 @@ impl State {
         let now = Instant::now();
         let delta_time = (now - self.last_frame_time).as_secs_f32();
         self.camera.update(delta_time);
-        self.simulation_parameters.delta_time = delta_time;
+        self.simulation_parameters.delta_time = delta_time * self.time_scale;
         self.queue.write_buffer(&self.simulation_uniform_buffer, 0, bytemuck::cast_slice(&[self.simulation_parameters]));
         self.last_frame_time = now;
     }
@@ -467,15 +395,33 @@ impl State {
                     pixels_per_point: self.window.scale_factor() as f32,
                 }, |ui| {
                     Grid::new("grid").num_columns(2).show(ui, |ui| {
+                        ui.label("Reset Particles");
+
+                        ui.horizontal(|ui| {
+                            if ui.button("Cube").clicked() {
+                                self.init_shape.open_modal_ui(InitShapeType::Cube);
+                            }
+                            if ui.button("Sphere").clicked() {
+                                self.init_shape.open_modal_ui(InitShapeType::Sphere);
+                            }
+                        });
+                        ui.end_row();
+                        ui.label("Time Scale");
+                        ui.add(egui::Slider::new(&mut self.time_scale, 0.0..=10.0));
+                        ui.end_row();
+
                         ui.label("Gravity Strength");
                         ui.add(egui::Slider::new(&mut self.simulation_parameters.gravity_strength, 0.0..=10.0));
                         ui.end_row();
+
                         ui.label("Particle Color");
                         let mut uniform = self.renderers.get_points_renderer().get_uniforms();
                         if ui.color_edit_button_rgba_unmultiplied(&mut uniform.color).changed() {
                             self.renderers.get_points_renderer().update_uniforms(queue, uniform);
                         }
+                        ui.end_row();
                     });
+                    self.init_shape.modal_ui(&self.device, &self.queue, &self.particle_chunks, self.particle_count, ui);
                 });
         }
 
@@ -490,76 +436,9 @@ impl State {
 
     }
 
-    pub fn init_particles_as_cube(&self) {
-        
-        let mut current_offset = 0u32;
-        for particle_chunk in &self.particle_chunks {
-            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Init Cube Encoder"),
-            });
-            {
-                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("Init Cube Compute Pass"),
-                    timestamp_writes: None
-                });
-
-                self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
-                    spawn_density: 13000u32,
-                    current_particle_offset: current_offset,
-                    size: 0.001,
-                    starting_lifetime: [f32::MAX, f32::MAX],
-                    _padding: [0.0f32]
-                }]));
-                compute_pass.set_pipeline(&self.particle_init_cube_pipeline);
-                compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
-                particle_chunk.dispatch_update(&mut compute_pass);
-                current_offset += particle_chunk.get_particle_count();
-            }
-            self.queue.submit(std::iter::once(encoder.finish()));
-        }
-    }
-
-    pub fn init_particles_as_sphere(&self) {
-        let mut current_offset = 0u32;
-        for particle_chunk in &self.particle_chunks {
-            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Init Sphere Encoder"),
-            });
-            {
-                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("Init Sphere Compute Pass"),
-                    timestamp_writes: None
-                });
-
-                self.queue.write_buffer(&self.particle_init_uniform_buffer, 0, bytemuck::cast_slice(&[InitShapeUniforms {
-                    spawn_density: self.particle_count,
-                    current_particle_offset: current_offset,
-                    size: 1.0,
-                    starting_lifetime: [f32::MAX, f32::MAX],
-                    _padding: [0.0f32]
-                }]));
-                compute_pass.set_pipeline(&self.particle_init_sphere_pipeline);
-                compute_pass.set_bind_group(1, &self.particle_init_bind_group, &[]);
-                particle_chunk.dispatch_update(&mut compute_pass);
-                current_offset += particle_chunk.get_particle_count();
-            }
-            self.queue.submit(std::iter::once(encoder.finish()));
-        }
-    }
-
     // impl State
     pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         match (code, is_pressed) {
-            (KeyCode::Escape, true) => event_loop.exit(),
-            (KeyCode::Digit1, true) => {
-                self.init_particles_as_cube();
-            },
-            (KeyCode::Digit2, true) => {
-                self.init_particles_as_sphere();
-            },
-            (KeyCode::F12, true) => {
-                self.init_particles_as_cube();
-            },
             _ => {
                 self.camera.handle_input(code, is_pressed);
             }
