@@ -10,7 +10,6 @@ use crate::{camera::Camera, egui_renderer::EguiRenderer, init_shape::{InitShape,
 
 
 
-// This will store the state of our game
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -42,8 +41,6 @@ pub struct State {
 }
 
 impl State {
-    // We don't need this to be async right now,
-    // but we will in the next tutorial
     pub async fn new(window: Arc<Window>, particle_count: u32) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
