@@ -27,15 +27,16 @@ impl PointsRenderer {
 	) -> Self {
 		let shader_module = device.create_shader_module(wgpu::include_wgsl!("points_renderer.wgsl"));
 
+		let uniform: PointsRendererUniforms = PointsRendererUniforms {
+			color: [0.8, 0.1, 0.1, 0.2], // Example color (RGBA)
+			color_far: [0.8, 0.1, 0.1, 0.2],
+			color_distance_multiplier: 0.5, // Example distance multiplier
+			_padding: [0.0; 3], // Padding to align to 16
+		};
 		let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Points Renderer Uniform Buffer"),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			contents: bytemuck::cast_slice(&[PointsRendererUniforms {
-				color: [0.8, 0.1, 0.1, 0.2], // Example color (RGBA)
-				color_far: [0.0, 0.0, 0.0, 0.2], // Example far color (RGBA)
-				color_distance_multiplier: 1.0, // Example distance multiplier
-				_padding: [0.0; 3], // Padding to align to 16
-			}]),
+			contents: bytemuck::cast_slice(&[uniform]),
 		});
 
 		let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -113,12 +114,7 @@ impl PointsRenderer {
 			}),
 			uniform_buffer,
 			uniform_bind_group,
-			uniform: PointsRendererUniforms {
-				color: [0.8, 0.1, 0.1, 0.2], // Example color (RGBA)
-				color_far: [0.0, 0.0, 0.0, 0.2],
-				color_distance_multiplier: 1.0, // Example distance multiplier
-				_padding: [0.0; 3], // Padding to align to 16
-			},
+			uniform,
 		}
 	}
 
