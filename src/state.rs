@@ -101,7 +101,13 @@ impl State {
             .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = wgpu::TextureFormat::Rgba16Float;
+        let mut surface_format = wgpu::TextureFormat::Rgba16Float;
+        if surface_caps.formats.contains(&surface_format) {
+            println!("Using Rgba16Float surface format");
+        } else {
+            surface_format = surface_caps.formats.iter().find(|format| format.is_srgb()).copied().unwrap_or(surface_caps.formats[0]);
+            println!("Using {:?} surface format", surface_format);
+        }
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -274,7 +280,6 @@ impl State {
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             //let max = 2048;
-
             self.config.width = width;
             self.config.height = height;
             self.surface.configure(&self.device, &self.config);

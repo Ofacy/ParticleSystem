@@ -48,6 +48,7 @@ fn vs_main(
     let distance = length(in.position - simulation_uniforms.gravity_position);
     let t = clamp(distance * points_renderer_uniforms.color_distance_multiplier, 0.0, 1.0);
     out.color = mix(points_renderer_uniforms.color, points_renderer_uniforms.color_far, t);
+    out.color.a = out.color.a * 1.0 / (1.0 + distance * distance);
     out.clip_position = view_proj_uniforms.projection * view_proj_uniforms.view * vec4<f32>(in.position, 1.0);
     return out;
 }
