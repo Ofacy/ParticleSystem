@@ -25,6 +25,8 @@ struct SimulationUniforms {
 
 struct PointsRendererUniforms {
     color: vec4<f32>,
+    color_far: vec4<f32>,
+    color_distance_multiplier: f32,
 }
 
 @group(0) @binding(0)
@@ -43,7 +45,9 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
 
-    out.color = points_renderer_uniforms.color * 2.0 / length(simulation_uniforms.gravity_position - in.position);
+    let distance = length(in.position - simulation_uniforms.gravity_position);
+    let t = clamp(distance * points_renderer_uniforms.color_distance_multiplier, 0.0, 1.0);
+    out.color = mix(points_renderer_uniforms.color, points_renderer_uniforms.color_far, t);
     out.clip_position = view_proj_uniforms.projection * view_proj_uniforms.view * vec4<f32>(in.position, 1.0);
     return out;
 }

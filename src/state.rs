@@ -101,13 +101,7 @@ impl State {
             .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-        // one will result in all the colors coming out darker. If you want to support non
-        // sRGB surfaces, you'll need to account for that when drawing to the frame.
-        let surface_format = surface_caps.formats.iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
+        let surface_format = wgpu::TextureFormat::Rgba16Float;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -414,9 +408,19 @@ impl State {
                         ui.add(egui::Slider::new(&mut self.simulation_parameters.gravity_strength, 0.0..=10.0));
                         ui.end_row();
 
-                        ui.label("Particle Color");
                         let mut uniform = self.renderers.get_points_renderer().get_uniforms();
+                        ui.label("Particle Color");
                         if ui.color_edit_button_rgba_unmultiplied(&mut uniform.color).changed() {
+                            self.renderers.get_points_renderer().update_uniforms(queue, uniform);
+                        }
+                        ui.end_row();
+                        ui.label("Far Color");
+                        if ui.color_edit_button_rgba_unmultiplied(&mut uniform.color_far).changed() {
+                            self.renderers.get_points_renderer().update_uniforms(queue, uniform);
+                        }
+                        ui.end_row();
+                        ui.label("Distance Multiplier");
+                        if ui.add(egui::Slider::new(&mut uniform.color_distance_multiplier, 0.0..=1.0)).changed() {
                             self.renderers.get_points_renderer().update_uniforms(queue, uniform);
                         }
                         ui.end_row();

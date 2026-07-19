@@ -13,6 +13,9 @@ pub struct PointsRenderer {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PointsRendererUniforms {
 	pub color: [f32; 4],
+	pub color_far: [f32; 4],
+	pub color_distance_multiplier: f32,
+	pub _padding: [f32; 3],
 }
 
 impl PointsRenderer {
@@ -29,6 +32,9 @@ impl PointsRenderer {
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 			contents: bytemuck::cast_slice(&[PointsRendererUniforms {
 				color: [0.8, 0.1, 0.1, 0.2], // Example color (RGBA)
+				color_far: [0.0, 0.0, 0.0, 0.2], // Example far color (RGBA)
+				color_distance_multiplier: 1.0, // Example distance multiplier
+				_padding: [0.0; 3], // Padding to align to 16
 			}]),
 		});
 
@@ -109,6 +115,9 @@ impl PointsRenderer {
 			uniform_bind_group,
 			uniform: PointsRendererUniforms {
 				color: [0.8, 0.1, 0.1, 0.2], // Example color (RGBA)
+				color_far: [0.0, 0.0, 0.0, 0.2],
+				color_distance_multiplier: 1.0, // Example distance multiplier
+				_padding: [0.0; 3], // Padding to align to 16
 			},
 		}
 	}
