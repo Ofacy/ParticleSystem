@@ -37,7 +37,8 @@ pub struct State {
     last_frame_time: Instant,
     last_cursor_position: (f32, f32),
     is_left_mouse_button_pressed: bool,
-    pub egui_renderer: EguiRenderer
+    pub egui_renderer: EguiRenderer,
+    is_gui_enabled: bool
 }
 
 impl State {
@@ -271,7 +272,8 @@ impl State {
             simulation_uniform_bind_group,
             last_cursor_position: (0.0, 0.0),
             is_left_mouse_button_pressed: false,
-            egui_renderer
+            egui_renderer,
+            is_gui_enabled: true
         })
     }
 
@@ -391,6 +393,9 @@ impl State {
                     size_in_pixels: [self.config.width, self.config.height],
                     pixels_per_point: self.window.scale_factor() as f32,
                 }, |ui| {
+                    if !self.is_gui_enabled {
+                        return;
+                    }
                     Grid::new("grid").num_columns(2).show(ui, |ui| {
                         ui.label("Reset Particles");
 
@@ -446,6 +451,9 @@ impl State {
     // impl State
     pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         match (code, is_pressed) {
+            (KeyCode::F1, false) => {
+                self.is_gui_enabled = !self.is_gui_enabled;
+            }
             _ => {
                 self.camera.handle_input(code, is_pressed);
             }
