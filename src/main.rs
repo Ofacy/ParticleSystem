@@ -15,10 +15,13 @@ mod texture;
 mod renderer;
 mod egui_renderer;
 
+use std::env;
+
 use winit::event_loop::EventLoop;
 
 
 pub fn main() -> anyhow::Result<()> {
+    let particle_count = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(4_000_000);
     #[cfg(not(target_arch = "wasm32"))]
     {
         env_logger::init();
@@ -33,12 +36,12 @@ pub fn main() -> anyhow::Result<()> {
     {
         use crate::app::App;
 
-        let mut app = App::new();
+        let mut app = App::new(particle_count);
         event_loop.run_app(&mut app)?;
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let app = App::new(&event_loop);
+        let app = App::new(particle_count, &event_loop);
         event_loop.spawn_app(app);
     }
 

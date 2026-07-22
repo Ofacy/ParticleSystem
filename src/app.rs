@@ -10,15 +10,17 @@ pub struct App {
     proxy: Option<winit::event_loop::EventLoopProxy<State>>,
     state: Option<State>,
     last_cursor_position: (f64, f64),
+    particle_count: u32
 }
 
 impl App {
-    pub fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
+    pub fn new(particle_count: u32, #[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
         #[cfg(target_arch = "wasm32")]
         let proxy = Some(event_loop.create_proxy());
         Self {
             state: None,
             last_cursor_position: (0.0, 0.0),
+            particle_count,
             #[cfg(target_arch = "wasm32")]
             proxy,
         }
@@ -50,7 +52,7 @@ impl ApplicationHandler<State> for App {
         {
             // If we are not on web we can use pollster to
             // await the window creation
-            self.state = Some(pollster::block_on(State::new(window, 8_380_416)).unwrap());
+            self.state = Some(pollster::block_on(State::new(window, self.particle_count)).unwrap());
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -61,7 +63,7 @@ impl ApplicationHandler<State> for App {
                 wasm_bindgen_futures::spawn_local(async move {
                     assert!(proxy
                         .send_event(
-                            State::new(window, 2048)
+                            State::new(window, self.particle_count)
                                 .await
                                 .expect("Unable to create canvas!!!")
                         )
