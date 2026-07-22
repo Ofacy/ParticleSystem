@@ -148,8 +148,8 @@ impl InitShape {
 			}
 			InitShapeDescriptor::Sphere { starting_lifetime, size } => {
 				InitShapeUniforms {
-					starting_lifetime: *starting_lifetime,
 					current_particle_offset: 0,
+					starting_lifetime: *starting_lifetime,
 					spawn_density: particle_count,
 					size: *size,
 					_padding: [0.0; 1],
@@ -162,23 +162,25 @@ impl InitShape {
 			InitShapeDescriptor::Sphere { .. } => &self.sphere_pipeline,
 		};
 
-		let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-			label: Some("Init Shape Encoder"),
-		});
 		for particle_chunk in chunks {
-			let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-				label: Some("Init Shape Compute Pass"),
-				timestamp_writes: None,
+			let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+				label: Some("Init Shape Encoder"),
 			});
+			{
+				let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+					label: Some("Init Shape Compute Pass"),
+					timestamp_writes: None,
+				});
 
-			queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
-			
-			compute_pass.set_pipeline(pipeline);
-			compute_pass.set_bind_group(1, &self.bind_group, &[]);
-			particle_chunk.dispatch_update(&mut compute_pass);
-			uniforms.current_particle_offset += particle_chunk.get_particle_count();
+				queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+				
+				compute_pass.set_pipeline(pipeline);
+				compute_pass.set_bind_group(1, &self.bind_group, &[]);
+				particle_chunk.dispatch_update(&mut compute_pass);
+				uniforms.current_particle_offset += particle_chunk.get_particle_count();
+			}
+			queue.submit(Some(encoder.finish()));
 		}
-		queue.submit(Some(encoder.finish()));
 	}
 
 	pub fn open_modal_ui(
