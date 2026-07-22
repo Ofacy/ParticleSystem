@@ -1,5 +1,5 @@
 use core::f32;
-use std::{sync::Arc, time::Instant};
+use std::{println, sync::Arc, time::Instant};
 
 use egui::Grid;
 use egui_wgpu::{ScreenDescriptor};
@@ -74,7 +74,7 @@ impl State {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -96,6 +96,7 @@ impl State {
                 trace: wgpu::Trace::Off,
             })
             .await?;
+        println!("Using device {}", device.adapter_info().name);
 
         let surface_caps = surface.get_capabilities(&adapter);
         let mut surface_format = wgpu::TextureFormat::Rgba16Float;
