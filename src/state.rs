@@ -42,7 +42,7 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(window: Arc<Window>, particle_count: u32) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>, mut particle_count: u32) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
         let camera = Camera::new(Vec3::new3([0.0, 0.0, 0.0]), Quaternion::from_vec(Vec3::new3([0.0, 0.0, 1.0]), Vec3::new3([0.0, 1.0, 0.0])), 50.0f32.to_radians(), size.width as f32 / size.height as f32, 0.001, 3000.0);
@@ -234,13 +234,16 @@ impl State {
 
         let mut particle_chunks = Vec::new();
         let mut particles_to_init = particle_count;
-        while particles_to_init != 0 {
+        while particles_to_init > 64 {
             let chunk = ParticleChunk::new(&device, &compute_buffers_bind_group_layout, particles_to_init);
             particles_to_init -= chunk.get_particle_count();
             particle_chunks.push(chunk);
         }
-
         println!("Created {} particle chunks", particle_chunks.len());
+        if particles_to_init != 0 {
+            particle_count -= particles_to_init;
+            println!("Created {} particles (could not initialize all {} particles as it is not dividable by 64)", particle_count, particle_count + particles_to_init);
+        }
 
         let init_shape = InitShape::new(&device, &compute_buffers_bind_group_layout);
 
@@ -453,6 +456,9 @@ impl State {
         match (code, is_pressed) {
             (KeyCode::F1, false) => {
                 self.is_gui_enabled = !self.is_gui_enabled;
+            },
+            (KeyCode::F12, true) => {
+                self.init_shape.init_shape(&self.device, &self.queue, &mut self.particle_chunks, self.particle_count, &crate::init_shape::InitShapeDescriptor::Sphere { starting_lifetime: [f32::MAX, f32::MAX], size: 1.0 });
             }
             _ => {
                 self.camera.handle_input(code, is_pressed);
