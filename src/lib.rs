@@ -16,10 +16,17 @@ mod renderer;
 mod egui_renderer;
 mod run;
 
-
+#[cfg(target_arch = "wasm32")]
 use crate::run::run;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
-pub fn main() -> anyhow::Result<()> {
-    run()
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(start)]
+pub fn run_web() -> Result<(), wasm_bindgen::JsValue> {
+    console_error_panic_hook::set_once();
+    run().unwrap_throw();
+
+    Ok(())
 }

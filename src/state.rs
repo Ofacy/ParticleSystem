@@ -1,8 +1,14 @@
 use core::f32;
-use std::{println, sync::Arc, time::Instant};
+use std::{sync::Arc};
+use web_time::Instant;
+
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 use egui::Grid;
 use egui_wgpu::{ScreenDescriptor};
+use log::{info, warn};
 use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor, util::{BufferInitDescriptor, DeviceExt}};
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
@@ -64,7 +70,7 @@ impl State {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
+            backends: wgpu::Backends::BROWSER_WEBGPU,
             flags: Default::default(),
             memory_budget_thresholds: Default::default(),
             backend_options: Default::default(),
@@ -81,6 +87,8 @@ impl State {
             })
             .await?;
     
+        info!("Max storage buffer per shader stage: {}", adapter.limits().max_storage_buffers_per_shader_stage);
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
@@ -88,24 +96,21 @@ impl State {
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 // WebGL doesn't support all of wgpu's features, so if
                 // we're building for the web we'll have to disable some.
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
+                required_limits: 
+                    wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
             .await?;
-        println!("Using device {}", device.adapter_info().name);
+        info!("Using device {}", device.adapter_info().name);
 
         let surface_caps = surface.get_capabilities(&adapter);
         let mut surface_format = wgpu::TextureFormat::Rgba16Float;
         if surface_caps.formats.contains(&surface_format) {
-            println!("Using Rgba16Float surface format");
+            info!("Using Rgba16Float surface format");
         } else {
             surface_format = surface_caps.formats.iter().find(|format| format.is_srgb()).copied().unwrap_or(surface_caps.formats[0]);
-            println!("Using {:?} surface format", surface_format);
+            info!("Using {:?} surface format", surface_format);
         }
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -239,10 +244,10 @@ impl State {
             particles_to_init -= chunk.get_particle_count();
             particle_chunks.push(chunk);
         }
-        println!("Created {} particle chunks", particle_chunks.len());
+        info!("Created {} particle chunks", particle_chunks.len());
         if particles_to_init != 0 {
             particle_count -= particles_to_init;
-            println!("Created {} particles (could not initialize all {} particles as it is not dividable by 64)", particle_count, particle_count + particles_to_init);
+            warn!("Created {} particles (could not initialize all {} particles as it is not dividable by 64)", particle_count, particle_count + particles_to_init);
         }
 
         let init_shape = InitShape::new(&device, &compute_buffers_bind_group_layout);

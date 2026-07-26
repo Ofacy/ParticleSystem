@@ -1,3 +1,4 @@
+use log::{info, log};
 use wgpu::util::DeviceExt;
 
 use crate::{particle_lifetime::ParticleLifetime, particle_vertex::ParticleVertex};
@@ -49,7 +50,7 @@ impl ParticleChunk {
 				device.limits().max_storage_buffer_binding_size as u32 / std::mem::size_of::<ParticleLifetime>() as u32,
 			);
 		}
-		println!("Creating particle chunk with {} particles ({} x {} x {})", particle_count_total, particle_count_x, particle_count_y, particle_count_z);
+		info!("Creating particle chunk with {} particles ({} x {} x {})", particle_count_total, particle_count_x, particle_count_y, particle_count_z);
 		assert!(particle_count_total <= particle_count_goal, "Particle count total exceeds goal");
 		assert!(particle_count_x % 64 == 0, "Particle count x must be divisible by 64");
 		assert!(particle_count_x <= dimension_limit, "Particle count x exceeds dimension limit");

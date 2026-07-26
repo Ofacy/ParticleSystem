@@ -1,9 +1,15 @@
 
 use std::sync::Arc;
 
-use winit::{application::ApplicationHandler, event::{KeyEvent, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::Window};
-
 use crate::state::State;
+
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+use winit::{
+    application::ApplicationHandler, event::*, event_loop::{ActiveEventLoop}, keyboard::{PhysicalKey}, window::Window
+};
 
 pub struct App {
     #[cfg(target_arch = "wasm32")]
@@ -57,13 +63,14 @@ impl ApplicationHandler<State> for App {
 
         #[cfg(target_arch = "wasm32")]
         {
+            let particle_count = self.particle_count;
             // Run the future asynchronously and use the
             // proxy to send the results to the event loop
             if let Some(proxy) = self.proxy.take() {
                 wasm_bindgen_futures::spawn_local(async move {
                     assert!(proxy
                         .send_event(
-                            State::new(window, self.particle_count)
+                            State::new(window, particle_count)
                                 .await
                                 .expect("Unable to create canvas!!!")
                         )
