@@ -14,7 +14,7 @@ mod quaternion;
 mod texture;
 mod renderer;
 mod egui_renderer;
-mod run;
+pub mod run;
 
 #[cfg(target_arch = "wasm32")]
 use crate::run::run;

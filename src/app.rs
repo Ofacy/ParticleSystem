@@ -6,6 +6,8 @@ use crate::state::State;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use winit::event_loop::EventLoop;
 
 use winit::{
     application::ApplicationHandler, event::*, event_loop::{ActiveEventLoop}, keyboard::{PhysicalKey}, window::Window
@@ -131,7 +133,7 @@ impl ApplicationHandler<State> for App {
                 state.handle_absolute_mouse_position(position.x, position.y);
                 self.last_cursor_position = (position.x, position.y);
             }
-            WindowEvent::MouseInput { device_id, state: mouse_state, button } => {
+            WindowEvent::MouseInput { device_id: _, state: mouse_state, button } => {
                 let is_pressed = mouse_state == winit::event::ElementState::Pressed;
                 state.handle_mouse_button(button, is_pressed);
             }
