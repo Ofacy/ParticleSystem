@@ -235,6 +235,16 @@ impl State {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
 
@@ -258,6 +268,7 @@ impl State {
                 cache: None,
             });
 
+        let mut current_offset = 0;
         let mut particle_chunks = Vec::new();
         let mut particles_to_init = particle_count;
         while particles_to_init > 64 {
@@ -265,8 +276,10 @@ impl State {
                 &device,
                 &compute_buffers_bind_group_layout,
                 particles_to_init,
+                current_offset,
             );
             particles_to_init -= chunk.get_particle_count();
+            current_offset += chunk.get_particle_count();
             particle_chunks.push(chunk);
         }
         info!("Created {} particle chunks", particle_chunks.len());

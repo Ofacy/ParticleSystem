@@ -1,4 +1,5 @@
-use log::{info};
+use log::info;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use crate::{particle_lifetime::ParticleLifetime, particle_vertex::ParticleVertex};
 
@@ -6,6 +7,7 @@ pub struct ParticleChunk {
     bind_group: wgpu::BindGroup,
     lifetime_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
+    particle_offset_buffer: wgpu::Buffer,
     particle_count_total: u32,
     particle_count_x: u32,
     particle_count_y: u32,
@@ -17,6 +19,7 @@ impl ParticleChunk {
         device: &wgpu::Device,
         update_bind_group_layout: &wgpu::BindGroupLayout,
         og_particle_count_goal: u32,
+        current_particle_offset: u32,
     ) -> Self {
         let mut particle_count_goal = og_particle_count_goal;
         let dimension_limit = device.limits().max_compute_workgroups_per_dimension;
@@ -98,6 +101,12 @@ impl ParticleChunk {
             mapped_at_creation: false,
         });
 
+        let particle_offset_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Particle Offset Buffer"),
+            contents: bytemuck::cast_slice(&[current_particle_offset]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Particle Bind Group"),
             layout: update_bind_group_layout,
@@ -110,6 +119,10 @@ impl ParticleChunk {
                     binding: 1,
                     resource: vertex_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: particle_offset_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -117,6 +130,7 @@ impl ParticleChunk {
             bind_group,
             lifetime_buffer,
             vertex_buffer,
+            particle_offset_buffer,
             particle_count_total,
             particle_count_x,
             particle_count_y,

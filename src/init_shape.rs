@@ -7,10 +7,9 @@ use crate::particle_chunk::ParticleChunk;
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InitShapeUniforms {
     pub starting_lifetime: [f32; 2],
-    pub current_particle_offset: u32,
     pub spawn_density: u32,
     pub size: f32,
-    pub _padding: [f32; 1],
+    pub _padding: [u32; 3],
 }
 
 pub enum InitShapeType {
@@ -130,27 +129,25 @@ impl InitShape {
         particle_count: u32,
         descriptor: &InitShapeDescriptor,
     ) {
-        let mut uniforms: InitShapeUniforms = match descriptor {
+        let uniforms: InitShapeUniforms = match descriptor {
             InitShapeDescriptor::Cube {
                 starting_lifetime,
                 spawn_density,
                 size,
             } => InitShapeUniforms {
                 starting_lifetime: *starting_lifetime,
-                current_particle_offset: 0,
                 spawn_density: *spawn_density,
                 size: *size,
-                _padding: [0.0; 1],
+                _padding: [0, 0, 0],
             },
             InitShapeDescriptor::Sphere {
                 starting_lifetime,
                 size,
             } => InitShapeUniforms {
-                current_particle_offset: 0,
                 starting_lifetime: *starting_lifetime,
                 spawn_density: particle_count,
                 size: *size,
-                _padding: [0.0; 1],
+                _padding: [0, 0, 0],
             },
         };
 
@@ -158,26 +155,23 @@ impl InitShape {
             InitShapeDescriptor::Cube { .. } => &self.cube_pipeline,
             InitShapeDescriptor::Sphere { .. } => &self.sphere_pipeline,
         };
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
-        for particle_chunk in chunks {
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Init Shape Encoder"),
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Init Shape Encoder"),
+        });
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Init Shape Compute Pass"),
+                timestamp_writes: None,
             });
-            {
-                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("Init Shape Compute Pass"),
-                    timestamp_writes: None,
-                });
-
-                queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
-
+            for particle_chunk in chunks {
                 compute_pass.set_pipeline(pipeline);
                 compute_pass.set_bind_group(1, &self.bind_group, &[]);
                 particle_chunk.dispatch_update(&mut compute_pass);
-                uniforms.current_particle_offset += particle_chunk.get_particle_count();
             }
-            queue.submit(Some(encoder.finish()));
         }
+        queue.submit(Some(encoder.finish()));
     }
 
     pub fn open_modal_ui(&mut self, descriptor: InitShapeType) {
