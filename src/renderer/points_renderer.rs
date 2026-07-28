@@ -1,4 +1,4 @@
-use wgpu::util::DeviceExt;
+use wgpu::{RenderPass, util::DeviceExt};
 
 use crate::{particle_chunk::ParticleChunk, particle_vertex::ParticleVertex, renderer::renderer::Renderer, texture::Texture};
 
@@ -33,6 +33,7 @@ impl PointsRenderer {
 			color_distance_multiplier: 0.5, // Example distance multiplier
 			_padding: [0.0; 3], // Padding to align to 16
 		};
+	
 		let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Points Renderer Uniform Buffer"),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -133,39 +134,9 @@ impl Renderer for  PointsRenderer {
 		&self,
 		chunk: &ParticleChunk,
 		_chunk_index: usize,
-		encoder: &mut wgpu::CommandEncoder,
-		view: &wgpu::TextureView,
-		depth_texture_view: &wgpu::TextureView,
-		simulation_params_bind_group: &wgpu::BindGroup,
-		view_proj_bind_group: &wgpu::BindGroup,
-		current_load_ops: (wgpu::LoadOp<wgpu::Color>, wgpu::LoadOp<f32>),
+		render_pass: &mut RenderPass<'_>,
 	) {
-		let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-			label: Some("Points Render Pass"),
-			color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-				view,
-				depth_slice: None,
-				resolve_target: None,
-				ops: wgpu::Operations {
-					load: current_load_ops.0,
-					store: wgpu::StoreOp::Store,
-				},
-			})],
-			depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-				view: &depth_texture_view,
-				depth_ops: Some(wgpu::Operations {
-					load: current_load_ops.1,
-					store: wgpu::StoreOp::Store,
-				}),
-				stencil_ops: None,
-			}),
-			occlusion_query_set: None,
-			timestamp_writes: None,
-			multiview_mask: None,
-		});
 		render_pass.set_pipeline(&self.pipeline);
-		render_pass.set_bind_group(0, view_proj_bind_group, &[]);
-		render_pass.set_bind_group(1, simulation_params_bind_group, &[]);
 		render_pass.set_bind_group(2, &self.uniform_bind_group, &[]);
 		render_pass.set_vertex_buffer(0, chunk.get_vertex_buffer().slice(..));
 		render_pass.draw(0..chunk.get_particle_count(), 0..1);

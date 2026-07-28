@@ -347,47 +347,62 @@ impl State {
 
         self.queue.write_buffer(&self.render_uniform_buffer, 0, bytemuck::cast_slice(&[self.camera.get_render_uniforms()]));
 
-        let mut load_ops = (wgpu::LoadOp::Clear(wgpu::Color {
-            r: 0.0,
-            g: 0.0,
-            b: 0.0,
-            a: 1.0,
-        }), wgpu::LoadOp::Clear(1.0));
-        for (chunk_index, particle_chunk) in self.particle_chunks.iter().enumerate() {
-            {
-                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("Particle Update Compute Pass"),
-                    timestamp_writes: None
-                });
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Particle Update Compute Pass"),
+                timestamp_writes: None
+            });
+            for particle_chunk in &self.particle_chunks {
+                {
 
-                compute_pass.set_pipeline(&self.update_particle_compute_pipeline);
-                compute_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
-                particle_chunk.dispatch_update(&mut compute_pass);
+                    compute_pass.set_pipeline(&self.update_particle_compute_pipeline);
+                    compute_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
+                    particle_chunk.dispatch_update(&mut compute_pass);
+                }
             }
-
-            {
-                self.renderers.get_renderer(RendererType::Points).render_chunk(
-                    particle_chunk,
-                    chunk_index,
-                    &mut encoder,
-                    &view,
-                    &self.depth_texture.view,
-                    &self.simulation_uniform_bind_group,
-                    &self.render_uniform_bind_group,
-                    load_ops
-                );
-            }
-            load_ops = (wgpu::LoadOp::Load, wgpu::LoadOp::Load);
         }
 
-        self.renderers.get_renderer(RendererType::Points).render_frame(
-            &mut encoder,
-            &view,
-            &self.depth_texture.view,
-            &self.simulation_uniform_bind_group,
-            &self.render_uniform_bind_group,
-            load_ops
-        );
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Points Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+		    render_pass.set_bind_group(0, &self.render_uniform_bind_group, &[]);
+		    render_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
+            for (chunk_index, particle_chunk) in self.particle_chunks.iter().enumerate() {
+
+                {
+                    self.renderers.get_renderer(RendererType::Points).render_chunk(
+                        particle_chunk,
+                        chunk_index,
+                        &mut render_pass
+                    );
+                }
+            }
+
+            self.renderers.get_renderer(RendererType::Points).render_frame(
+                &mut render_pass
+            );
+        }
         
         {
             let queue = &self.queue;

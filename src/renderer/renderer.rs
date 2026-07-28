@@ -1,3 +1,5 @@
+use wgpu::RenderPass;
+
 use crate::particle_chunk::ParticleChunk;
 
 pub trait Renderer {
@@ -6,25 +8,11 @@ pub trait Renderer {
 		&self,
 		_chunk: &ParticleChunk,
 		_chunk_index: usize,
-		_encoder: &mut wgpu::CommandEncoder,
-		_view: &wgpu::TextureView,
-		_depth_texture_view: &wgpu::TextureView,
-		_simulation_params_bind_group: &wgpu::BindGroup,
-		_view_proj_bind_group: &wgpu::BindGroup,
-		_current_load_ops: (wgpu::LoadOp<wgpu::Color>, wgpu::LoadOp<f32>),
+		_render_pass: &mut RenderPass<'_>,
 	) {}
 
 	fn render_frame(
 		&self,
-		_encoder: &mut wgpu::CommandEncoder,
-		_view: &wgpu::TextureView,
-		_depth_texture_view: &wgpu::TextureView,
-		_simulation_params_bind_group: &wgpu::BindGroup,
-		_view_proj_bind_group: &wgpu::BindGroup,
-		_current_load_ops: (wgpu::LoadOp<wgpu::Color>, wgpu::LoadOp<f32>),
+		_render_pass: &mut RenderPass<'_>,
 	) {}
-
-	fn get_simulation_bounds(&self) -> Option<(f32, f32, f32, f32)> {
-		None
-	}
 }
