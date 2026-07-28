@@ -9,6 +9,8 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use winit::event_loop::EventLoop;
 
+use log::error;
+
 use winit::{
     application::ApplicationHandler, event::*, event_loop::{ActiveEventLoop}, keyboard::{PhysicalKey}, window::Window
 };
@@ -115,7 +117,13 @@ impl ApplicationHandler<State> for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
-                state.render();
+                match state.render() {
+                    Ok(()) => {}
+                    Err(err) => {
+                        error!("Error {err} occurred while rendering");
+                        return;
+                    }
+                }
             }
             WindowEvent::KeyboardInput {
                 event:
