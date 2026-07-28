@@ -128,22 +128,25 @@ impl Quaternion {
     pub fn to_matrix4(self) -> Matrix4 {
         Matrix4 {
             data: [
-                1.0 - 2.0 * (self.y * self.y + self.z * self.z),
-                2.0 * (self.x * self.y + self.w * self.z),
-                2.0 * (self.x * self.z - self.w * self.y),
-                0.0,
-                2.0 * (self.x * self.y - self.w * self.z),
-                1.0 - 2.0 * (self.x * self.x + self.z * self.z),
-                2.0 * (self.y * self.z + self.w * self.x),
-                0.0,
-                2.0 * (self.x * self.z + self.w * self.y),
-                2.0 * (self.y * self.z - self.w * self.x),
-                1.0 - 2.0 * (self.x * self.x + self.y * self.y),
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0,
+                [
+                    1.0 - 2.0 * (self.y * self.y + self.z * self.z),
+                    2.0 * (self.x * self.y + self.w * self.z),
+                    2.0 * (self.x * self.z - self.w * self.y),
+                    0.0,
+                ],
+                [
+                    2.0 * (self.x * self.y - self.w * self.z),
+                    1.0 - 2.0 * (self.x * self.x + self.z * self.z),
+                    2.0 * (self.y * self.z + self.w * self.x),
+                    0.0,
+                ],
+                [
+                    2.0 * (self.x * self.z + self.w * self.y),
+                    2.0 * (self.y * self.z - self.w * self.x),
+                    1.0 - 2.0 * (self.x * self.x + self.y * self.y),
+                    0.0,
+                ],
+                [0.0, 0.0, 0.0, 1.0],
             ],
         }
     }
