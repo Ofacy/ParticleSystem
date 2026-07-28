@@ -345,6 +345,7 @@ impl State {
             label: Some("Render Encoder"),
         });
 
+        let renderer = self.renderers.get_renderer(RendererType::Points);
         self.queue.write_buffer(&self.render_uniform_buffer, 0, bytemuck::cast_slice(&[self.camera.get_render_uniforms()]));
 
         {
@@ -352,12 +353,13 @@ impl State {
                 label: Some("Particle Update Compute Pass"),
                 timestamp_writes: None
             });
-            for particle_chunk in &self.particle_chunks {
+            for (chunk_index, particle_chunk) in self.particle_chunks.iter().enumerate() {
                 {
 
                     compute_pass.set_pipeline(&self.update_particle_compute_pipeline);
                     compute_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
                     particle_chunk.dispatch_update(&mut compute_pass);
+                    renderer.compute_chunk(particle_chunk, chunk_index, &mut compute_pass);
                 }
             }
         }
@@ -391,7 +393,7 @@ impl State {
             for (chunk_index, particle_chunk) in self.particle_chunks.iter().enumerate() {
 
                 {
-                    self.renderers.get_renderer(RendererType::Points).render_chunk(
+                    renderer.render_chunk(
                         particle_chunk,
                         chunk_index,
                         &mut render_pass
@@ -399,7 +401,7 @@ impl State {
                 }
             }
 
-            self.renderers.get_renderer(RendererType::Points).render_frame(
+            renderer.render_frame(
                 &mut render_pass
             );
         }
