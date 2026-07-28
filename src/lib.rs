@@ -1,20 +1,19 @@
-
-mod state;
 mod app;
+mod camera;
+mod egui_renderer;
+mod init_shape;
+mod matrix4;
+mod particle_chunk;
 mod particle_lifetime;
 mod particle_vertex;
-mod particle_chunk;
-mod init_shape;
-mod view_proj_uniforms;
-mod simulation_parameters;
-mod camera;
-mod matrix4;
-mod vector;
 mod quaternion;
-mod texture;
 mod renderer;
-mod egui_renderer;
 pub mod run;
+mod simulation_parameters;
+mod state;
+mod texture;
+mod vector;
+mod view_proj_uniforms;
 
 #[cfg(target_arch = "wasm32")]
 use crate::run::run;

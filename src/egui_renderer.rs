@@ -49,7 +49,7 @@ impl EguiRenderer {
     pub fn handle_input(&mut self, window: &Window, event: &WindowEvent) -> EventResponse {
         return self.state.on_window_event(window, event);
     }
-    
+
     pub fn run_ui(
         &mut self,
         device: &Device,
@@ -58,10 +58,11 @@ impl EguiRenderer {
         window: &Window,
         window_surface_view: &TextureView,
         screen_descriptor: ScreenDescriptor,
-        run_ui: impl FnMut(&mut Ui)) {
+        run_ui: impl FnMut(&mut Ui),
+    ) {
         let input = self.state.take_egui_input(window);
         let full_output = self.context().run_ui(input, run_ui);
-        
+
         self.state
             .handle_platform_output(window, full_output.platform_output);
 
@@ -98,5 +99,4 @@ impl EguiRenderer {
             self.renderer.free_texture(x)
         }
     }
-
 }

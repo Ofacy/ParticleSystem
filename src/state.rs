@@ -1,20 +1,30 @@
 use core::f32;
-use std::{sync::Arc};
+use std::sync::Arc;
 use web_time::Instant;
-
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 use egui::Grid;
-use egui_wgpu::{ScreenDescriptor};
+use egui_wgpu::ScreenDescriptor;
 use log::{info, warn};
-use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor, util::{BufferInitDescriptor, DeviceExt}};
+use wgpu::{
+    BindGroupDescriptor, BindGroupLayoutDescriptor, BufferUsages, ComputePassDescriptor,
+    util::{BufferInitDescriptor, DeviceExt},
+};
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use crate::{camera::Camera, egui_renderer::EguiRenderer, init_shape::{InitShape, InitShapeType}, particle_chunk::ParticleChunk, quaternion::Quaternion, renderer::renderers::{RendererType, Renderers}, simulation_parameters::SimulationParameters, texture::Texture, vector::Vec3};
-
-
+use crate::{
+    camera::Camera,
+    egui_renderer::EguiRenderer,
+    init_shape::{InitShape, InitShapeType},
+    particle_chunk::ParticleChunk,
+    quaternion::Quaternion,
+    renderer::renderers::{RendererType, Renderers},
+    simulation_parameters::SimulationParameters,
+    texture::Texture,
+    vector::Vec3,
+};
 
 pub struct State {
     surface: wgpu::Surface<'static>,
@@ -44,16 +54,22 @@ pub struct State {
     last_cursor_position: (f32, f32),
     is_left_mouse_button_pressed: bool,
     pub egui_renderer: EguiRenderer,
-    is_gui_enabled: bool
+    is_gui_enabled: bool,
 }
 
 impl State {
     pub async fn new(window: Arc<Window>, mut particle_count: u32) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
-        let camera = Camera::new(Vec3::new3([0.0, 0.0, 0.0]), Quaternion::from_vec(Vec3::new3([0.0, 0.0, 1.0]), Vec3::new3([0.0, 1.0, 0.0])), 50.0f32.to_radians(), size.width as f32 / size.height as f32, 0.001, 3000.0);
+        let camera = Camera::new(
+            Vec3::new3([0.0, 0.0, 0.0]),
+            Quaternion::from_vec(Vec3::new3([0.0, 0.0, 1.0]), Vec3::new3([0.0, 1.0, 0.0])),
+            50.0f32.to_radians(),
+            size.width as f32 / size.height as f32,
+            0.001,
+            3000.0,
+        );
 
-        
         let simulation_parameters = SimulationParameters {
             gravity_position: [0.0, 0.0, 0.0, 0.0],
             gravity_strength: 3.0,
@@ -86,8 +102,11 @@ impl State {
                 force_fallback_adapter: false,
             })
             .await?;
-    
-        info!("Max storage buffer per shader stage: {}", adapter.limits().max_storage_buffers_per_shader_stage);
+
+        info!(
+            "Max storage buffer per shader stage: {}",
+            adapter.limits().max_storage_buffers_per_shader_stage
+        );
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -96,8 +115,7 @@ impl State {
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 // WebGL doesn't support all of wgpu's features, so if
                 // we're building for the web we'll have to disable some.
-                required_limits: 
-                    wgpu::Limits::default(),
+                required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
@@ -109,7 +127,12 @@ impl State {
         if surface_caps.formats.contains(&surface_format) {
             info!("Using Rgba16Float surface format");
         } else {
-            surface_format = surface_caps.formats.iter().find(|format| format.is_srgb()).copied().unwrap_or(surface_caps.formats[0]);
+            surface_format = surface_caps
+                .formats
+                .iter()
+                .find(|format| format.is_srgb())
+                .copied()
+                .unwrap_or(surface_caps.formats[0]);
             info!("Using {:?} surface format", surface_format);
         }
         let config = wgpu::SurfaceConfiguration {
@@ -123,10 +146,10 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        let simulation_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Simulation Uniform Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let simulation_uniform_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Simulation Uniform Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
@@ -135,14 +158,13 @@ impl State {
                         min_binding_size: None,
                     },
                     count: None,
-                }
-            ]
-        });
+                }],
+            });
 
-        let render_uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Render Uniform Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let render_uniform_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Render Uniform Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
@@ -151,9 +173,8 @@ impl State {
                         min_binding_size: None,
                     },
                     count: None,
-                }
-            ]
-        });
+                }],
+            });
 
         let render_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Render Uniform Buffer"),
@@ -164,12 +185,10 @@ impl State {
         let render_uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Render Uniform Bind Group"),
             layout: &render_uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: render_uniform_buffer.as_entire_binding(),
-                }
-            ]
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: render_uniform_buffer.as_entire_binding(),
+            }],
         });
 
         let simulation_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -181,81 +200,96 @@ impl State {
         let simulation_uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Simulation Uniform Bind Group"),
             layout: &simulation_uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: simulation_uniform_buffer.as_entire_binding(),
-                }
-            ]
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: simulation_uniform_buffer.as_entire_binding(),
+            }],
         });
 
         let depth_texture = Texture::create_depth_texture(&device, &config, "Depth Texture");
 
-        let update_particle_shader = device.create_shader_module(wgpu::include_wgsl!("compute.wgsl"));
+        let update_particle_shader =
+            device.create_shader_module(wgpu::include_wgsl!("compute.wgsl"));
 
-        let compute_buffers_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Compute Buffers Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let compute_buffers_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Compute Buffers Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }
-            ]
-        });
+                ],
+            });
 
-        let update_particle_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Particle Update Compute Pipeline Layout"),
-            bind_group_layouts: &[
-                Some(&compute_buffers_bind_group_layout),
-                Some(&simulation_uniform_bind_group_layout)
-            ],
-            immediate_size: 0,
-        });
+        let update_particle_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Particle Update Compute Pipeline Layout"),
+                bind_group_layouts: &[
+                    Some(&compute_buffers_bind_group_layout),
+                    Some(&simulation_uniform_bind_group_layout),
+                ],
+                immediate_size: 0,
+            });
 
-        let update_particle_compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Particle update compute pipeline"),
-            layout: Some(&update_particle_pipeline_layout),
-            module: &update_particle_shader,
-            entry_point: Some("update_particle"),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None
-        });
+        let update_particle_compute_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Particle update compute pipeline"),
+                layout: Some(&update_particle_pipeline_layout),
+                module: &update_particle_shader,
+                entry_point: Some("update_particle"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            });
 
         let mut particle_chunks = Vec::new();
         let mut particles_to_init = particle_count;
         while particles_to_init > 64 {
-            let chunk = ParticleChunk::new(&device, &compute_buffers_bind_group_layout, particles_to_init);
+            let chunk = ParticleChunk::new(
+                &device,
+                &compute_buffers_bind_group_layout,
+                particles_to_init,
+            );
             particles_to_init -= chunk.get_particle_count();
             particle_chunks.push(chunk);
         }
         info!("Created {} particle chunks", particle_chunks.len());
         if particles_to_init != 0 {
             particle_count -= particles_to_init;
-            warn!("Created {} particles (could not initialize all {} particles as it is not dividable by 64)", particle_count, particle_count + particles_to_init);
+            warn!(
+                "Created {} particles (could not initialize all {} particles as it is not dividable by 64)",
+                particle_count,
+                particle_count + particles_to_init
+            );
         }
 
         let init_shape = InitShape::new(&device, &compute_buffers_bind_group_layout);
 
-        let renderers = Renderers::new(&device, &particle_chunks, &simulation_uniform_bind_group_layout, &render_uniform_bind_group_layout, &config);
+        let renderers = Renderers::new(
+            &device,
+            &particle_chunks,
+            &simulation_uniform_bind_group_layout,
+            &render_uniform_bind_group_layout,
+            &config,
+        );
 
-        let egui_renderer = EguiRenderer::new(&device, surface_format, 
-            1, &window);
+        let egui_renderer = EguiRenderer::new(&device, surface_format, 1, &window);
 
         Ok(Self {
             surface,
@@ -281,7 +315,7 @@ impl State {
             last_cursor_position: (0.0, 0.0),
             is_left_mouse_button_pressed: false,
             egui_renderer,
-            is_gui_enabled: true
+            is_gui_enabled: true,
         })
     }
 
@@ -293,7 +327,8 @@ impl State {
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
             self.camera.set_aspect_ratio(width as f32 / height as f32);
-            self.depth_texture = Texture::create_depth_texture(&self.device, &self.config, "Depth Texture");
+            self.depth_texture =
+                Texture::create_depth_texture(&self.device, &self.config, "Depth Texture");
         }
     }
 
@@ -302,10 +337,14 @@ impl State {
         let delta_time = (now - self.last_frame_time).as_secs_f32();
         self.camera.update(delta_time);
         self.simulation_parameters.delta_time = delta_time * self.time_scale;
-        self.queue.write_buffer(&self.simulation_uniform_buffer, 0, bytemuck::cast_slice(&[self.simulation_parameters]));
+        self.queue.write_buffer(
+            &self.simulation_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.simulation_parameters]),
+        );
         self.last_frame_time = now;
     }
-    
+
     pub fn render(&mut self) -> anyhow::Result<()> {
         let start = Instant::now();
         self.update();
@@ -315,47 +354,54 @@ impl State {
         if !self.is_surface_configured {
             return Ok(());
         }
-            
+
         let output = match self.surface.get_current_texture() {
-                wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-                wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
-                    self.surface.configure(&self.device, &self.config);
-                    surface_texture
-                }
-                wgpu::CurrentSurfaceTexture::Timeout
-                | wgpu::CurrentSurfaceTexture::Occluded
-                | wgpu::CurrentSurfaceTexture::Validation => {
-                    // Skip this frame
-                    return Ok(());
-                }
-                wgpu::CurrentSurfaceTexture::Outdated => {
-                    self.surface.configure(&self.device, &self.config);
-                    return Ok(());
-                }
-                wgpu::CurrentSurfaceTexture::Lost => {
-                    // You could recreate the devices and all resources
-                    // created with it here, but we'll just bail
-                    anyhow::bail!("Lost device");
-                }
+            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
+                self.surface.configure(&self.device, &self.config);
+                surface_texture
+            }
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded
+            | wgpu::CurrentSurfaceTexture::Validation => {
+                // Skip this frame
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface.configure(&self.device, &self.config);
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                // You could recreate the devices and all resources
+                // created with it here, but we'll just bail
+                anyhow::bail!("Lost device");
+            }
         };
 
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
 
         let renderer = self.renderers.get_renderer(RendererType::Points);
-        self.queue.write_buffer(&self.render_uniform_buffer, 0, bytemuck::cast_slice(&[self.camera.get_render_uniforms()]));
+        self.queue.write_buffer(
+            &self.render_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera.get_render_uniforms()]),
+        );
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("Particle Update Compute Pass"),
-                timestamp_writes: None
+                timestamp_writes: None,
             });
             for (chunk_index, particle_chunk) in self.particle_chunks.iter().enumerate() {
                 {
-
                     compute_pass.set_pipeline(&self.update_particle_compute_pipeline);
                     compute_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
                     particle_chunk.dispatch_update(&mut compute_pass);
@@ -388,24 +434,17 @@ impl State {
                 timestamp_writes: None,
                 multiview_mask: None,
             });
-		    render_pass.set_bind_group(0, &self.render_uniform_bind_group, &[]);
-		    render_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.render_uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.simulation_uniform_bind_group, &[]);
             for (chunk_index, particle_chunk) in self.particle_chunks.iter().enumerate() {
-
                 {
-                    renderer.render_chunk(
-                        particle_chunk,
-                        chunk_index,
-                        &mut render_pass
-                    );
+                    renderer.render_chunk(particle_chunk, chunk_index, &mut render_pass);
                 }
             }
 
-            renderer.render_frame(
-                &mut render_pass
-            );
+            renderer.render_frame(&mut render_pass);
         }
-        
+
         {
             let queue = &self.queue;
             self.egui_renderer.run_ui(
@@ -417,7 +456,8 @@ impl State {
                 ScreenDescriptor {
                     size_in_pixels: [self.config.width, self.config.height],
                     pixels_per_point: self.window.scale_factor() as f32,
-                }, |ui| {
+                },
+                |ui| {
                     if !self.is_gui_enabled {
                         return;
                     }
@@ -438,28 +478,56 @@ impl State {
                         ui.end_row();
 
                         ui.label("Gravity Strength");
-                        ui.add(egui::Slider::new(&mut self.simulation_parameters.gravity_strength, 0.0..=10.0));
+                        ui.add(egui::Slider::new(
+                            &mut self.simulation_parameters.gravity_strength,
+                            0.0..=10.0,
+                        ));
                         ui.end_row();
 
                         let mut uniform = self.renderers.get_points_renderer().get_uniforms();
                         ui.label("Particle Color");
-                        if ui.color_edit_button_rgba_unmultiplied(&mut uniform.color).changed() {
-                            self.renderers.get_points_renderer().update_uniforms(queue, uniform);
+                        if ui
+                            .color_edit_button_rgba_unmultiplied(&mut uniform.color)
+                            .changed()
+                        {
+                            self.renderers
+                                .get_points_renderer()
+                                .update_uniforms(queue, uniform);
                         }
                         ui.end_row();
                         ui.label("Far Color");
-                        if ui.color_edit_button_rgba_unmultiplied(&mut uniform.color_far).changed() {
-                            self.renderers.get_points_renderer().update_uniforms(queue, uniform);
+                        if ui
+                            .color_edit_button_rgba_unmultiplied(&mut uniform.color_far)
+                            .changed()
+                        {
+                            self.renderers
+                                .get_points_renderer()
+                                .update_uniforms(queue, uniform);
                         }
                         ui.end_row();
                         ui.label("Distance Multiplier");
-                        if ui.add(egui::Slider::new(&mut uniform.color_distance_multiplier, 0.0..=1.0)).changed() {
-                            self.renderers.get_points_renderer().update_uniforms(queue, uniform);
+                        if ui
+                            .add(egui::Slider::new(
+                                &mut uniform.color_distance_multiplier,
+                                0.0..=1.0,
+                            ))
+                            .changed()
+                        {
+                            self.renderers
+                                .get_points_renderer()
+                                .update_uniforms(queue, uniform);
                         }
                         ui.end_row();
                     });
-                    self.init_shape.modal_ui(&self.device, &self.queue, &self.particle_chunks, self.particle_count, ui);
-                });
+                    self.init_shape.modal_ui(
+                        &self.device,
+                        &self.queue,
+                        &self.particle_chunks,
+                        self.particle_count,
+                        ui,
+                    );
+                },
+            );
         }
 
         self.queue.submit([encoder.finish()]);
@@ -468,9 +536,16 @@ impl State {
 
         let end = Instant::now();
         let frame_time = (end - start).as_nanos() as f32 / 1_000_000f32;
-        self.window.set_title(format!("ParticleSystem running {} particles | {:>9.3} ms, {}/s", self.particle_count, frame_time, 1000.0 / frame_time).as_str());
+        self.window.set_title(
+            format!(
+                "ParticleSystem running {} particles | {:>9.3} ms, {}/s",
+                self.particle_count,
+                frame_time,
+                1000.0 / frame_time
+            )
+            .as_str(),
+        );
         Ok(())
-
     }
 
     // impl State
@@ -478,9 +553,18 @@ impl State {
         match (code, is_pressed) {
             (KeyCode::F1, false) => {
                 self.is_gui_enabled = !self.is_gui_enabled;
-            },
+            }
             (KeyCode::F12, true) => {
-                self.init_shape.init_shape(&self.device, &self.queue, &mut self.particle_chunks, self.particle_count, &crate::init_shape::InitShapeDescriptor::Sphere { starting_lifetime: [f32::MAX, f32::MAX], size: 1.0 });
+                self.init_shape.init_shape(
+                    &self.device,
+                    &self.queue,
+                    &mut self.particle_chunks,
+                    self.particle_count,
+                    &crate::init_shape::InitShapeDescriptor::Sphere {
+                        starting_lifetime: [f32::MAX, f32::MAX],
+                        size: 1.0,
+                    },
+                );
             }
             _ => {
                 self.camera.handle_input(code, is_pressed);
@@ -495,12 +579,25 @@ impl State {
     pub fn handle_mouse_move(&mut self, delta_x: f64, delta_y: f64) {
         if self.is_left_mouse_button_pressed {
             let (x, y) = self.last_cursor_position;
-            self.camera.get_direction_from_screen_coordinates(x, y, self.config.width as f32, self.config.height as f32).map(|dir| {
-                let gravity_position = self.camera.get_position() + dir * 6.0;
-                self.simulation_parameters.gravity_position = [gravity_position.x, gravity_position.y, gravity_position.z, 1.0];
-            });
+            self.camera
+                .get_direction_from_screen_coordinates(
+                    x,
+                    y,
+                    self.config.width as f32,
+                    self.config.height as f32,
+                )
+                .map(|dir| {
+                    let gravity_position = self.camera.get_position() + dir * 6.0;
+                    self.simulation_parameters.gravity_position = [
+                        gravity_position.x,
+                        gravity_position.y,
+                        gravity_position.z,
+                        1.0,
+                    ];
+                });
         }
-        self.camera.handle_mouse_movement(delta_x as f32, delta_y as f32);
+        self.camera
+            .handle_mouse_movement(delta_x as f32, delta_y as f32);
     }
 
     pub fn handle_mouse_button(&mut self, button: winit::event::MouseButton, is_pressed: bool) {
@@ -512,15 +609,26 @@ impl State {
                 if is_pressed {
                     // set gravity center under mouse cursor depending on the last cursor position and the camera's view and projection matrices
                     let (x, y) = self.last_cursor_position;
-                    self.camera.get_direction_from_screen_coordinates(x, y, self.config.width as f32, self.config.height as f32).map(|dir| {
-                        let gravity_position = self.camera.get_position() + dir * 6.0;
-                        self.simulation_parameters.gravity_position = [gravity_position.x, gravity_position.y, gravity_position.z, 1.0];
-                    });
+                    self.camera
+                        .get_direction_from_screen_coordinates(
+                            x,
+                            y,
+                            self.config.width as f32,
+                            self.config.height as f32,
+                        )
+                        .map(|dir| {
+                            let gravity_position = self.camera.get_position() + dir * 6.0;
+                            self.simulation_parameters.gravity_position = [
+                                gravity_position.x,
+                                gravity_position.y,
+                                gravity_position.z,
+                                1.0,
+                            ];
+                        });
                 }
                 self.is_left_mouse_button_pressed = is_pressed;
             }
             _ => {}
         }
     }
-
 }

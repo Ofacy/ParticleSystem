@@ -1,8 +1,6 @@
-
 use std::sync::Arc;
 
 use crate::state::State;
-
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -12,7 +10,8 @@ use winit::event_loop::EventLoop;
 use log::error;
 
 use winit::{
-    application::ApplicationHandler, event::*, event_loop::{ActiveEventLoop}, keyboard::{PhysicalKey}, window::Window
+    application::ApplicationHandler, event::*, event_loop::ActiveEventLoop, keyboard::PhysicalKey,
+    window::Window,
 };
 
 pub struct App {
@@ -20,11 +19,14 @@ pub struct App {
     proxy: Option<winit::event_loop::EventLoopProxy<State>>,
     state: Option<State>,
     last_cursor_position: (f64, f64),
-    particle_count: u32
+    particle_count: u32,
 }
 
 impl App {
-    pub fn new(particle_count: u32, #[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
+    pub fn new(
+        particle_count: u32,
+        #[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>,
+    ) -> Self {
         #[cfg(target_arch = "wasm32")]
         let proxy = Some(event_loop.create_proxy());
         Self {
@@ -46,7 +48,7 @@ impl ApplicationHandler<State> for App {
         {
             use wasm_bindgen::JsCast;
             use winit::platform::web::WindowAttributesExtWebSys;
-            
+
             const CANVAS_ID: &str = "canvas";
 
             let window = wgpu::web_sys::window().unwrap_throw();
@@ -72,13 +74,15 @@ impl ApplicationHandler<State> for App {
             // proxy to send the results to the event loop
             if let Some(proxy) = self.proxy.take() {
                 wasm_bindgen_futures::spawn_local(async move {
-                    assert!(proxy
-                        .send_event(
-                            State::new(window, particle_count)
-                                .await
-                                .expect("Unable to create canvas!!!")
-                        )
-                        .is_ok())
+                    assert!(
+                        proxy
+                            .send_event(
+                                State::new(window, particle_count)
+                                    .await
+                                    .expect("Unable to create canvas!!!")
+                            )
+                            .is_ok()
+                    )
                 });
             }
         }
@@ -109,22 +113,24 @@ impl ApplicationHandler<State> for App {
             None => return,
         };
 
-        if state.egui_renderer.handle_input(&mut state.window, &event).consumed {
+        if state
+            .egui_renderer
+            .handle_input(&mut state.window, &event)
+            .consumed
+        {
             return;
         }
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
-            WindowEvent::RedrawRequested => {
-                match state.render() {
-                    Ok(()) => {}
-                    Err(err) => {
-                        error!("Error {err} occurred while rendering");
-                        return;
-                    }
+            WindowEvent::RedrawRequested => match state.render() {
+                Ok(()) => {}
+                Err(err) => {
+                    error!("Error {err} occurred while rendering");
+                    return;
                 }
-            }
+            },
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -141,7 +147,11 @@ impl ApplicationHandler<State> for App {
                 state.handle_absolute_mouse_position(position.x, position.y);
                 self.last_cursor_position = (position.x, position.y);
             }
-            WindowEvent::MouseInput { device_id: _, state: mouse_state, button } => {
+            WindowEvent::MouseInput {
+                device_id: _,
+                state: mouse_state,
+                button,
+            } => {
                 let is_pressed = mouse_state == winit::event::ElementState::Pressed;
                 state.handle_mouse_button(button, is_pressed);
             }
