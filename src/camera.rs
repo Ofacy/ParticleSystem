@@ -14,6 +14,14 @@ pub struct Camera {
     key_states: u8,
 }
 
+const KEY_FORWARD: u8 = 0b0000001;
+const KEY_BACKWARD: u8 = 0b0000010;
+const KEY_LEFT: u8 = 0b0000100;
+const KEY_RIGHT: u8 = 0b0001000;
+const KEY_ENABLE: u8 = 0b0010000;
+const KEY_ROLL_LEFT: u8 = 0b0100000;
+const KEY_ROLL_RIGHT: u8 = 0b1000000;
+
 impl Camera {
     pub fn new(
         position: Vec3,
@@ -79,24 +87,34 @@ impl Camera {
     }
 
     pub fn update(&mut self, delta_time: f32) {
-        if (self.key_states & 0b10000) == 0 {
+        if (self.key_states & KEY_ENABLE) == 0 {
             return;
         }
         let speed = 2.0;
         let forward = self.rotation.to_direction();
-        let right = Vec3::new3([forward.z, 0.0, -forward.x]).normalize();
+        let right = self
+            .rotation
+            .to_matrix4()
+            .transform_direction(Vec3::new3([1.0, 0.0, 0.0]))
+            .normalize();
 
-        if self.key_states & 0b00001 != 0 {
+        if self.key_states & KEY_FORWARD != 0 {
             self.position -= forward * speed * delta_time;
         }
-        if self.key_states & 0b00010 != 0 {
+        if self.key_states & KEY_BACKWARD != 0 {
             self.position += forward * speed * delta_time;
         }
-        if self.key_states & 0b00100 != 0 {
+        if self.key_states & KEY_LEFT != 0 {
             self.position -= right * speed * delta_time;
         }
-        if self.key_states & 0b01000 != 0 {
+        if self.key_states & KEY_RIGHT != 0 {
             self.position += right * speed * delta_time;
+        }
+        if self.key_states & KEY_ROLL_LEFT != 0 {
+            self.rotation = Quaternion::rotate(forward, delta_time) * self.rotation;
+        }
+        if self.key_states & KEY_ROLL_RIGHT != 0 {
+            self.rotation = Quaternion::rotate(forward, -delta_time) * self.rotation;
         }
     }
 
@@ -104,30 +122,44 @@ impl Camera {
         match code {
             KeyCode::KeyW => {
                 self.key_states = if is_pressed {
-                    self.key_states | 0b0001
+                    self.key_states | KEY_FORWARD
                 } else {
-                    self.key_states & !0b0001
+                    self.key_states & !KEY_FORWARD
                 }
             }
             KeyCode::KeyS => {
                 self.key_states = if is_pressed {
-                    self.key_states | 0b0010
+                    self.key_states | KEY_BACKWARD
                 } else {
-                    self.key_states & !0b0010
+                    self.key_states & !KEY_BACKWARD
                 }
             }
             KeyCode::KeyA => {
                 self.key_states = if is_pressed {
-                    self.key_states | 0b0100
+                    self.key_states | KEY_LEFT
                 } else {
-                    self.key_states & !0b0100
+                    self.key_states & !KEY_LEFT
                 }
             }
             KeyCode::KeyD => {
                 self.key_states = if is_pressed {
-                    self.key_states | 0b1000
+                    self.key_states | KEY_RIGHT
                 } else {
-                    self.key_states & !0b1000
+                    self.key_states & !KEY_RIGHT
+                }
+            }
+            KeyCode::KeyE => {
+                self.key_states = if is_pressed {
+                    self.key_states | KEY_ROLL_RIGHT
+                } else {
+                    self.key_states & !KEY_ROLL_RIGHT
+                }
+            }
+            KeyCode::KeyQ => {
+                self.key_states = if is_pressed {
+                    self.key_states | KEY_ROLL_LEFT
+                } else {
+                    self.key_states & !KEY_ROLL_LEFT
                 }
             }
             _ => {}
@@ -135,18 +167,22 @@ impl Camera {
     }
 
     pub fn handle_mouse_movement(&mut self, delta_x: f32, delta_y: f32) {
-        if (self.key_states & 0b10000) == 0 {
+        if (self.key_states & KEY_ENABLE) == 0 {
             return;
         }
         let sensitivity = 0.002;
-        let yaw = delta_x * sensitivity;
-        let pitch = delta_y * sensitivity;
 
-        let yaw_quat = Quaternion::rotate(Vec3::new3([0.0, 1.0, 0.0]), -yaw);
-        let pitch_quat = Quaternion::rotate(Vec3::new3([1.0, 0.0, 0.0]), -pitch);
+        let up = self
+            .rotation
+            .to_matrix4()
+            .transform_direction(Vec3::new3([0.0, 1.0, 0.0]));
+        let right = Vec3::new3([1.0, 0.0, 0.0]);
 
-        self.rotation = yaw_quat * self.rotation;
-        self.rotation = self.rotation * pitch_quat;
+        let yaw_rotation = Quaternion::rotate(up, -delta_x * sensitivity);
+        let pitch_rotation = Quaternion::rotate(right, -delta_y * sensitivity);
+
+        self.rotation = yaw_rotation * self.rotation;
+        self.rotation = self.rotation * pitch_rotation;
     }
 
     pub fn handle_mouse_button(&mut self, button: winit::event::MouseButton, is_pressed: bool) {
@@ -154,9 +190,9 @@ impl Camera {
         match button {
             winit::event::MouseButton::Right => {
                 self.key_states = if is_pressed {
-                    self.key_states | 0b10000
+                    self.key_states | KEY_ENABLE
                 } else {
-                    self.key_states & !0b10000
+                    self.key_states & !KEY_ENABLE
                 };
             }
             _ => {}
