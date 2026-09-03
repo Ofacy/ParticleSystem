@@ -5,9 +5,7 @@ use crate::{particle_lifetime::ParticleLifetime, particle_vertex::ParticleVertex
 
 pub struct ParticleChunk {
     bind_group: wgpu::BindGroup,
-    lifetime_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
-    particle_offset_buffer: wgpu::Buffer,
     particle_count_total: u32,
     particle_count_x: u32,
     particle_count_y: u32,
@@ -128,18 +126,12 @@ impl ParticleChunk {
 
         Self {
             bind_group,
-            lifetime_buffer,
             vertex_buffer,
-            particle_offset_buffer,
             particle_count_total,
             particle_count_x,
             particle_count_y,
             particle_count_z,
         }
-    }
-
-    pub fn get_lifetime_buffer(&self) -> &wgpu::Buffer {
-        &self.lifetime_buffer
     }
 
     pub fn get_vertex_buffer(&self) -> &wgpu::Buffer {

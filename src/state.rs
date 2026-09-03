@@ -562,7 +562,7 @@ impl State {
     }
 
     // impl State
-    pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+    pub fn handle_key(&mut self, _event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         match (code, is_pressed) {
             (KeyCode::F1, false) => {
                 self.is_gui_enabled = !self.is_gui_enabled;

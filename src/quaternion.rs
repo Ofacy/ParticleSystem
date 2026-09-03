@@ -15,17 +15,6 @@ impl Quaternion {
         Self { w, x, y, z }
     }
 
-    pub fn normalize(mut self) -> Self {
-        let norm = (self.w * self.w + self.x * self.x + self.y * self.y + self.z * self.z).sqrt();
-        if norm > 0.0 {
-            self.w /= norm;
-            self.x /= norm;
-            self.y /= norm;
-            self.z /= norm;
-        }
-        self
-    }
-
     pub fn from_vec(direction: Vec3, up: Vec3) -> Self {
         let f = direction.normalize();
         let r = up.cross(f).normalize();
@@ -67,19 +56,6 @@ impl Quaternion {
         }
     }
 
-    pub fn from_axis_angle(axis: Vec3, angle: f32) -> Self {
-        let half_angle = angle / 2.0;
-        let sin_half_angle = half_angle.sin();
-        let cos_half_angle = half_angle.cos();
-
-        Self {
-            w: cos_half_angle,
-            x: axis.x * sin_half_angle,
-            y: axis.y * sin_half_angle,
-            z: axis.z * sin_half_angle,
-        }
-    }
-
     pub fn inverse(self) -> Self {
         let norm_sq = self.w * self.w + self.x * self.x + self.y * self.y + self.z * self.z;
         Self {
@@ -88,19 +64,6 @@ impl Quaternion {
             y: -self.y / norm_sq,
             z: -self.z / norm_sq,
         }
-    }
-
-    pub fn identity() -> Self {
-        Self {
-            w: 1.0,
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-        }
-    }
-
-    pub fn dot(self, rhs: Self) -> f32 {
-        self.w * rhs.w + self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
 
     pub fn rotate(axis: Vec3, angle: f32) -> Quaternion {

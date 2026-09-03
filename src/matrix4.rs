@@ -9,10 +9,6 @@ pub struct Matrix4 {
 }
 
 impl Matrix4 {
-    pub fn new(data: [[f32; 4]; 4]) -> Self {
-        Self { data }
-    }
-
     pub fn identity() -> Self {
         Self {
             data: [
@@ -22,52 +18,6 @@ impl Matrix4 {
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }
-    }
-
-    pub fn inverse(&self) -> Self {
-        Self {
-            data: [
-                [self.data[0][0], self.data[1][0], self.data[2][0], 0.0],
-                [self.data[0][1], self.data[1][1], self.data[2][1], 0.0],
-                [self.data[0][2], self.data[1][2], self.data[2][2], 0.0],
-                [
-                    -(self.data[3][0]),
-                    -(self.data[3][1]),
-                    -(self.data[3][2]),
-                    1.0,
-                ],
-            ],
-        }
-    }
-
-    pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Self {
-        let rl = right - left;
-        let tb = top - bottom;
-        let fn_ = far - near;
-
-        Self {
-            data: [
-                [2.0 / rl, 0.0, 0.0, 0.0],
-                [0.0, 2.0 / tb, 0.0, 0.0],
-                [0.0, 0.0, -2.0 / fn_, 0.0],
-                [
-                    -(right + left) / rl,
-                    -(top + bottom) / tb,
-                    -(far + near) / fn_,
-                    1.0,
-                ],
-            ],
-        }
-    }
-
-    pub fn transpose(&self) -> Self {
-        let mut transposed = [[0.0; 4]; 4];
-        for i in 0..4 {
-            for j in 0..4 {
-                transposed[i][j] = self.data[j][i];
-            }
-        }
-        Self { data: transposed }
     }
 
     pub fn perspective(fov_y: f32, aspect: f32, near: f32, far: f32) -> Self {
@@ -80,21 +30,6 @@ impl Matrix4 {
                 [0.0, f, 0.0, 0.0],
                 [0.0, 0.0, (far + near) * nf, -1.0],
                 [0.0, 0.0, -(2.0 * far * near) / (far - near), 0.0],
-            ],
-        }
-    }
-
-    pub fn view(eye: Vec3, center: Vec3, up: Vec3) -> Self {
-        let f = (center - eye).normalize();
-        let r = up.cross(f).normalize();
-        let u = f.cross(r);
-
-        Self {
-            data: [
-                [r.x, u.x, -f.x, 0.0],
-                [r.y, u.y, -f.y, 0.0],
-                [r.z, u.z, -f.z, 0.0],
-                [-r.dot(eye), -u.dot(eye), f.dot(eye), 1.0],
             ],
         }
     }

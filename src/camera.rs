@@ -45,14 +45,6 @@ impl Camera {
         self.position
     }
 
-    pub fn get_rotation(&self) -> Quaternion {
-        self.rotation
-    }
-
-    pub fn get_fov(&self) -> f32 {
-        self.fov
-    }
-
     pub fn set_aspect_ratio(&mut self, aspect_ratio: f32) {
         self.projection_matrix = Matrix4::perspective(self.fov, aspect_ratio, self.near, self.far);
     }
