@@ -67,7 +67,7 @@ impl Camera {
         y: f32,
         width: f32,
         height: f32,
-    ) -> Option<Vec3> {
+    ) -> Vec3 {
         let aspect_ratio = width / height;
         let fov_rad = self.fov;
         let tan_fov = (fov_rad / 2.0).tan();
@@ -78,12 +78,10 @@ impl Camera {
 
         let dir_camera_space = Vec3::new3([ndc_x * aspect_ratio * tan_fov, ndc_y * tan_fov, -1.0]);
 
-        let direction_world_space = self
-            .rotation
+        self.rotation
             .to_matrix4()
             .transform_direction(dir_camera_space)
-            .normalize();
-        Some(direction_world_space)
+            .normalize()
     }
 
     pub fn update(&mut self, delta_time: f32) {
@@ -187,15 +185,12 @@ impl Camera {
 
     pub fn handle_mouse_button(&mut self, button: winit::event::MouseButton, is_pressed: bool) {
         // Implement mouse button handling if needed
-        match button {
-            winit::event::MouseButton::Right => {
-                self.key_states = if is_pressed {
-                    self.key_states | KEY_ENABLE
-                } else {
-                    self.key_states & !KEY_ENABLE
-                };
-            }
-            _ => {}
+        if button == winit::event::MouseButton::Right {
+            self.key_states = if is_pressed {
+                self.key_states | KEY_ENABLE
+            } else {
+                self.key_states & !KEY_ENABLE
+            };
         }
     }
 }

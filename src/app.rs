@@ -115,7 +115,7 @@ impl ApplicationHandler<State> for App {
 
         if state
             .egui_renderer
-            .handle_input(&mut state.window, &event)
+            .handle_input(&state.window, &event)
             .consumed
         {
             return;
@@ -128,7 +128,6 @@ impl ApplicationHandler<State> for App {
                 Ok(()) => {}
                 Err(err) => {
                     error!("Error {err} occurred while rendering");
-                    return;
                 }
             },
             WindowEvent::KeyboardInput {

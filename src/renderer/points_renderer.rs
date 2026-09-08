@@ -1,8 +1,8 @@
 use wgpu::{RenderPass, util::DeviceExt};
 
 use crate::{
-    particle_chunk::ParticleChunk, particle_vertex::ParticleVertex, renderer::renderer::Renderer,
-    texture::Texture,
+    particle_chunk::ParticleChunk, particle_vertex::ParticleVertex,
+    renderer::renderer_base::Renderer, texture::Texture,
 };
 
 pub struct PointsRenderer {

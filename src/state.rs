@@ -16,7 +16,7 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 use crate::{
     camera::Camera,
-    egui_renderer::EguiRenderer,
+    egui_renderer::{EguiRenderer, RunUiDescription},
     init_shape::{InitShape, InitShapeType},
     particle_chunk::ParticleChunk,
     quaternion::Quaternion,
@@ -466,11 +466,13 @@ impl State {
         {
             let queue = &self.queue;
             self.egui_renderer.run_ui(
-                &self.device,
-                queue,
-                &mut encoder,
-                &self.window,
-                &view,
+                RunUiDescription {
+                    device: &self.device,
+                    queue,
+                    encoder: &mut encoder,
+                    window: &self.window,
+                    window_surface_view: &view,
+                },
                 ScreenDescriptor {
                     size_in_pixels: [self.config.width, self.config.height],
                     pixels_per_point: self.window.scale_factor() as f32,
@@ -594,7 +596,7 @@ impl State {
                 self.init_shape.init_shape(
                     &self.device,
                     &self.queue,
-                    &mut self.particle_chunks,
+                    &self.particle_chunks,
                     self.particle_count,
                     &crate::init_shape::InitShapeDescriptor::Sphere {
                         starting_lifetime: [f32::MAX, f32::MAX],
@@ -615,22 +617,19 @@ impl State {
     pub fn handle_mouse_move(&mut self, delta_x: f64, delta_y: f64) {
         if self.is_left_mouse_button_pressed {
             let (x, y) = self.last_cursor_position;
-            self.camera
-                .get_direction_from_screen_coordinates(
-                    x,
-                    y,
-                    self.config.width as f32,
-                    self.config.height as f32,
-                )
-                .map(|dir| {
-                    let gravity_position = self.camera.get_position() + dir * self.cursor_distance;
-                    self.simulation_parameters.gravity_position = [
-                        gravity_position.x,
-                        gravity_position.y,
-                        gravity_position.z,
-                        1.0,
-                    ];
-                });
+            let dir = self.camera.get_direction_from_screen_coordinates(
+                x,
+                y,
+                self.config.width as f32,
+                self.config.height as f32,
+            );
+            let gravity_position = self.camera.get_position() + dir * self.cursor_distance;
+            self.simulation_parameters.gravity_position = [
+                gravity_position.x,
+                gravity_position.y,
+                gravity_position.z,
+                1.0,
+            ];
         }
         self.camera
             .handle_mouse_movement(delta_x as f32, delta_y as f32);
@@ -645,22 +644,19 @@ impl State {
                 if is_pressed {
                     // set gravity center under mouse cursor depending on the last cursor position and the camera's view and projection matrices
                     let (x, y) = self.last_cursor_position;
-                    self.camera
-                        .get_direction_from_screen_coordinates(
-                            x,
-                            y,
-                            self.config.width as f32,
-                            self.config.height as f32,
-                        )
-                        .map(|dir| {
-                            let gravity_position = self.camera.get_position() + dir * 6.0;
-                            self.simulation_parameters.gravity_position = [
-                                gravity_position.x,
-                                gravity_position.y,
-                                gravity_position.z,
-                                1.0,
-                            ];
-                        });
+                    let dir = self.camera.get_direction_from_screen_coordinates(
+                        x,
+                        y,
+                        self.config.width as f32,
+                        self.config.height as f32,
+                    );
+                    let gravity_position = self.camera.get_position() + dir * 6.0;
+                    self.simulation_parameters.gravity_position = [
+                        gravity_position.x,
+                        gravity_position.y,
+                        gravity_position.z,
+                        1.0,
+                    ];
                 }
                 self.is_left_mouse_button_pressed = is_pressed;
             }

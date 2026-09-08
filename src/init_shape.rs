@@ -287,7 +287,7 @@ impl InitShape {
         match end_operation {
             InitShapeModalEndOperation::InitShape => {
                 let mut modal_ui = self.modal_ui.unwrap();
-                if modal_ui.use_lifetimes == false {
+                if !modal_ui.use_lifetimes {
                     match &mut modal_ui.descriptor {
                         InitShapeDescriptor::Cube {
                             starting_lifetime, ..

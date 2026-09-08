@@ -1,6 +1,6 @@
 use crate::{
     particle_chunk::ParticleChunk,
-    renderer::{points_renderer::PointsRenderer, renderer::Renderer},
+    renderer::{points_renderer::PointsRenderer, renderer_base::Renderer},
 };
 
 pub struct Renderers {

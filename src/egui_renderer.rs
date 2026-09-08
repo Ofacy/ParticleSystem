@@ -10,6 +10,14 @@ pub struct EguiRenderer {
     renderer: Renderer,
 }
 
+pub struct RunUiDescription<'a> {
+    pub device: &'a Device,
+    pub queue: &'a Queue,
+    pub encoder: &'a mut CommandEncoder,
+    pub window: &'a Window,
+    pub window_surface_view: &'a TextureView,
+}
+
 impl EguiRenderer {
     pub fn context(&self) -> &Context {
         self.state.egui_ctx()
@@ -47,24 +55,20 @@ impl EguiRenderer {
     }
 
     pub fn handle_input(&mut self, window: &Window, event: &WindowEvent) -> EventResponse {
-        return self.state.on_window_event(window, event);
+        self.state.on_window_event(window, event)
     }
 
     pub fn run_ui(
         &mut self,
-        device: &Device,
-        queue: &Queue,
-        encoder: &mut CommandEncoder,
-        window: &Window,
-        window_surface_view: &TextureView,
+        desc: RunUiDescription,
         screen_descriptor: ScreenDescriptor,
         run_ui: impl FnMut(&mut Ui),
     ) {
-        let input = self.state.take_egui_input(window);
+        let input = self.state.take_egui_input(desc.window);
         let full_output = self.context().run_ui(input, run_ui);
 
         self.state
-            .handle_platform_output(window, full_output.platform_output);
+            .handle_platform_output(desc.window, full_output.platform_output);
 
         let tris = self
             .state
@@ -72,15 +76,20 @@ impl EguiRenderer {
             .tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point());
         for (id, image_delta) in &full_output.textures_delta.set {
             self.renderer
-                .update_texture(device, queue, *id, image_delta);
+                .update_texture(desc.device, desc.queue, *id, image_delta);
         }
-        self.renderer
-            .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
-        let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        self.renderer.update_buffers(
+            desc.device,
+            desc.queue,
+            desc.encoder,
+            &tris,
+            &screen_descriptor,
+        );
+        let rpass = desc.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             multiview_mask: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 depth_slice: None,
-                view: window_surface_view,
+                view: desc.window_surface_view,
                 resolve_target: None,
                 ops: egui_wgpu::wgpu::Operations {
                     load: egui_wgpu::wgpu::LoadOp::Load,
