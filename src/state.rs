@@ -496,15 +496,21 @@ impl State {
                         ui.end_row();
 
                         ui.label("Gravity Distance from Camera");
-                        ui.add(egui::Slider::new(& mut self.cursor_distance, 0.1..=20.0));
+                        ui.add(egui::Slider::new(&mut self.cursor_distance, 0.1..=20.0));
                         ui.end_row();
 
                         ui.label("(Re)Starting Lifetime");
-                        ui.add(egui::Slider::new(&mut self.simulation_parameters.starting_lifetime, 0.1..=100.0));
+                        ui.add(egui::Slider::new(
+                            &mut self.simulation_parameters.starting_lifetime,
+                            0.1..=100.0,
+                        ));
                         ui.end_row();
-                        
+
                         ui.label("Emitter radius");
-                        ui.add(egui::Slider::new(&mut self.simulation_parameters.starting_position_radius, 0.1..=100.0));
+                        ui.add(egui::Slider::new(
+                            &mut self.simulation_parameters.starting_position_radius,
+                            0.1..=100.0,
+                        ));
                         ui.end_row();
 
                         ui.label("Gravity Strength");
