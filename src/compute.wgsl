@@ -56,7 +56,7 @@ fn update_particle(
     let lifetime = particle_lifetimes[particle_index].lifetime - simulation_uniforms.delta_time;
     if (lifetime < 0.0) {
         particle_lifetimes[particle_index].lifetime = simulation_uniforms.starting_lifetime;
-        particle_vertices[particle_index].position = simulation_uniforms.starting_position + random_in_sphere(f32(particle_index)) * simulation_uniforms.starting_position_radius;
+        particle_vertices[particle_index].position = simulation_uniforms.starting_position + random_in_sphere(f32(particle_index) + simulation_uniforms.delta_time) * simulation_uniforms.starting_position_radius;
 
         particle_lifetimes[particle_index].velocity = random_in_sphere(f32(particle_index + 1)) * 0.3;
         //particle_lifetimes[particle_index].velocity = vec3<f32>(0.0, 0.0, 420.0);
