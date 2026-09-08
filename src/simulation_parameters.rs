@@ -5,7 +5,8 @@ pub struct SimulationParameters {
     pub starting_position: [f32; 3],
     pub starting_position_radius: f32,
     pub delta_time: f32,
+    pub time: f32,
     pub gravity_strength: f32,
     pub starting_lifetime: f32,
-    pub _padding: [f32; 2],
+    pub _padding: [f32; 1],
 }

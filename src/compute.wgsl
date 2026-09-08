@@ -12,6 +12,7 @@ struct SimulationUniforms {
     starting_position: vec3<f32>,
     starting_position_radius: f32,
     delta_time: f32,
+    time: f32,
     gravity_strength: f32,
     starting_lifetime: f32,
 }
@@ -21,6 +22,9 @@ var<storage, read_write> particle_lifetimes: array<ParticleLifetime>;
 
 @group(0) @binding(1)
 var<storage, read_write> particle_vertices: array<ParticleVertex>;
+
+@group(0) @binding(2)
+var<uniform> current_offset: u32;
 
 @group(1) @binding(0)
 var<uniform> simulation_uniforms: SimulationUniforms;
@@ -56,9 +60,9 @@ fn update_particle(
     let lifetime = particle_lifetimes[particle_index].lifetime - simulation_uniforms.delta_time;
     if (lifetime < 0.0) {
         particle_lifetimes[particle_index].lifetime = simulation_uniforms.starting_lifetime;
-        particle_vertices[particle_index].position = simulation_uniforms.starting_position + random_in_sphere(f32(particle_index) + simulation_uniforms.delta_time) * simulation_uniforms.starting_position_radius;
+        particle_vertices[particle_index].position = simulation_uniforms.starting_position + random_in_sphere(f32(particle_index + current_offset) + simulation_uniforms.time) * simulation_uniforms.starting_position_radius;
 
-        particle_lifetimes[particle_index].velocity = random_in_sphere(f32(particle_index + 1)) * 0.3;
+        particle_lifetimes[particle_index].velocity = random_in_sphere(f32(particle_index + 1 + current_offset) + simulation_uniforms.time) * 0.3;
         //particle_lifetimes[particle_index].velocity = vec3<f32>(0.0, 0.0, 420.0);
         return;
     }

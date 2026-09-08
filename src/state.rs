@@ -49,6 +49,8 @@ pub struct State {
     time_scale: f32,
     particle_count: u32,
 
+    cursor_distance: f32,
+
     camera: Camera,
     last_frame_time: Instant,
     last_cursor_position: (f32, f32),
@@ -77,7 +79,8 @@ impl State {
             starting_position_radius: 1.0,
             starting_lifetime: 40.0,
             delta_time: 0.0,
-            _padding: [0.0, 0.0],
+            time: 0.0,
+            _padding: [0.0],
         };
 
         // The instance is a handle to our GPU
@@ -320,6 +323,7 @@ impl State {
             particle_chunks,
             init_shape,
             camera,
+            cursor_distance: 6.0,
             last_frame_time: Instant::now(),
             simulation_parameters,
             time_scale: 1.0,
@@ -350,6 +354,7 @@ impl State {
         let delta_time = (now - self.last_frame_time).as_secs_f32();
         self.camera.update(delta_time);
         self.simulation_parameters.delta_time = delta_time * self.time_scale;
+        self.simulation_parameters.time += self.simulation_parameters.time;
         self.queue.write_buffer(
             &self.simulation_uniform_buffer,
             0,
@@ -490,6 +495,10 @@ impl State {
                         ui.add(egui::Slider::new(&mut self.time_scale, 0.0..=10.0));
                         ui.end_row();
 
+                        ui.label("Gravity Distance from Camera");
+                        ui.add(egui::Slider::new(& mut self.cursor_distance, 0.1..=20.0));
+                        ui.end_row();
+
                         ui.label("(Re)Starting Lifetime");
                         ui.add(egui::Slider::new(&mut self.simulation_parameters.starting_lifetime, 0.1..=100.0));
                         ui.end_row();
@@ -608,7 +617,7 @@ impl State {
                     self.config.height as f32,
                 )
                 .map(|dir| {
-                    let gravity_position = self.camera.get_position() + dir * 6.0;
+                    let gravity_position = self.camera.get_position() + dir * self.cursor_distance;
                     self.simulation_parameters.gravity_position = [
                         gravity_position.x,
                         gravity_position.y,

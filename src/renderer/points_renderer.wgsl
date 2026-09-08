@@ -19,6 +19,7 @@ struct SimulationUniforms {
     starting_position: vec3<f32>,
     starting_position_radius: f32,
     delta_time: f32,
+    time: f32,
     gravity_strength: f32,
     starting_lifetime: f32,
 }
